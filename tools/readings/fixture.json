@@ -1,0 +1,7 @@
+[
+  {"asset": "TEST_FIXTURE_NOT_GAME", "row_id": "dialog", "source_text": "今日は大人が学校へ行った。"},
+  {"asset": "TEST_FIXTURE_NOT_GAME", "row_id": "choice1", "source_text": "学校へ行く"},
+  {"asset": "TEST_FIXTURE_NOT_GAME", "row_id": "choice2", "source_text": "食べ物を買う"},
+  {"asset": "TEST_FIXTURE_NOT_GAME", "row_id": "name", "source_text": "奥空心白と春香に会う。"},
+  {"asset": "TEST_FIXTURE_NOT_GAME", "row_id": "control", "source_text": "<color value=\"赤\">学校</>\n{PlayerName}と食べる。"}
+]
