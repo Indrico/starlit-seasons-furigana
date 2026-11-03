@@ -6,6 +6,19 @@ This is a locally tested alpha for Steam build `8278842` (game 1.61, Unreal Engi
 
 ![Two-line Japanese dialogue with furigana](docs/images/dialogue.jpg)
 
+## Download and usage
+
+Download [v0.1.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.1)
+and follow the [English usage guide](docs/usage.md).
+
+This first release is a **source and local-build package**, not a drag-and-drop
+binary mod. It includes the renderer, installer, extraction and reading tools,
+tests, and documentation. Download the pinned UE4SS loader separately and generate
+`readings.lua` from your own installed game, following the guide.
+
+If the mod is already installed, launch the game through Steam and press **F7**
+to toggle furigana. Reinstallation is not required to use the existing setup.
+
 ## Current status
 
 - Original Japanese dialogue was extracted locally from 163 CML DataTables: 59,361 records and 53,567 unique texts.
