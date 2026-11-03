@@ -2,6 +2,8 @@
 
 Display small kana above kanji in Japanese dialogue and answer choices in **THE IDOLM@STER STARLIT SEASON**.
 
+For AI contributors, [AGENTS.md](AGENTS.md) records the implementation, release status, development workflow, and remaining verification work.
+
 This is a locally tested alpha for Steam build `8278842` (game 1.61, Unreal Engine 4.24). It uses UE4SS Lua and the game's original font. **F7** toggles furigana. Readings appear after a complete matching line has finished revealing and remained stable for 250 ms.
 
 ![Two-line Japanese dialogue with furigana](docs/images/dialogue.jpg)
