@@ -65,11 +65,11 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((self.bin / "dwmapi.dll").is_file())
         self.assertFalse((self.bin / "ue4ss/Mods/UnwantedMod").exists())
         self.assertEqual((self.bin / "ue4ss/Mods/mods.txt").read_text(), "StarlitFurigana : 1\n")
-        self.assertEqual(len(manifest["installed"]), 9)
+        self.assertEqual(len(manifest["installed"]), 11)
         extra = self.bin / "ue4ss/user-created.log"
         extra.write_bytes(b"keep this")
         result = installer.uninstall(self.game)
-        self.assertEqual(result["removed_files"], 9)
+        self.assertEqual(result["removed_files"], 11)
         self.assertEqual(extra.read_bytes(), b"keep this")
         self.assertFalse((self.bin / "dwmapi.dll").exists())
         self.assertFalse((self.game / installer.STATE_NAME).exists())

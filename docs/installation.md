@@ -1,5 +1,8 @@
 # Install and remove the local mod
 
+For the ready-to-use Windows release, follow the [drag-and-drop guide](usage.md).
+The instructions below describe the optional Python-managed source installation.
+
 This alpha has been tested locally on the supported build. See [runtime verification](runtime.md) for observed behavior and limits. Source unit tests alone do not establish compatibility with another build.
 
 Close Starlit Season completely before installing or uninstalling. The installer does not terminate game processes. Windows file-lock errors cause the operation to fail and trigger rollback rather than replacing a locked loader.

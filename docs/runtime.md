@@ -117,3 +117,26 @@ match or log message alone does not establish correct visual rendering.
 A separate 1920 by 1080 launch was attempted through Steam arguments and a
 temporary game configuration. The game clamped its window back to 1680 by 1050
 on this display; therefore a true 1080p visual result is not claimed.
+
+## Drag-and-drop release verification
+
+For `v0.1.0-alpha.2`, the old managed loader was removed and the exact Windows
+release ZIP was extracted into the clean runtime directory. The included
+checker verified all 14 runtime files and backed up both known English-patch
+files. Steam startup and dialogue rendering succeeded with the bundled loader
+and the prebuilt hash/span annotation table, without the private exact-text
+reading database. F7 disabled and re-enabled annotations. After normal game
+exit, the bundled uninstaller removed the owned runtime files and restored both
+English-patch backups with identical hashes. The same ZIP was reinstalled and
+checked successfully for the final local setup.
+
+![Dialogue rendered using the drag-and-drop package](images/portable-dialogue.jpg)
+
+The release lookup was also run against every one of the 53,567 distinct local
+source strings. All 49,749 annotated entries reproduced the original base text,
+reading spans, and control markers; unannotated strings remained unmatched.
+Seven new standalone tests cover SHA-256, Unicode byte spans, source mismatch,
+and payload validation. Seven Windows package tests cover fresh setup/removal,
+patch restoration, edited files, unsupported builds, manifest restrictions, and
+rollback when a loader cannot be renamed. Together with the existing suites,
+the project has 60 passing tests.

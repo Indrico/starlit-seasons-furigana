@@ -83,3 +83,23 @@ The local build processed 59,361 records, including 53,567 unique source texts. 
 Unresolved groups include counters and numerals, ambiguous `１日`, and expressive elongated spelling. For example, blindly using a dictionary reading of `ついたち` for every `１日` would be wrong in a sentence meaning “one day.” These cases remain visible in the report. Exact-text lookup also does not distinguish identical lines spoken by characters with different preferred readings, resolve arbitrary player-entered names, or handle text changed by a later game update.
 
 Original character readings are local input. The source-only overrides file also uses names and romanizations from the [official character listing](https://starlit-season.idolmaster.jp/idol/). No original dialogue corpus, generated lookup table, character profile asset, or encryption key is included in this repository.
+
+## Prebuilt release annotations
+
+`export_annotations.py` converts the private `readings.json` to a shareable
+`starlit-furigana-spans-v1` Lua table. It contains only exact-source SHA-256 keys,
+UTF-8 byte lengths, span positions, control flags, and kana readings. Original
+base text, row identities, and asset paths are omitted. Unannotated rows are
+omitted; duplicate sources share an entry. The exporter rejects non-kana
+readings and conflicting entries.
+
+At runtime `reading_lookup.lua` hashes the widget's exact UTF-8 text and restores
+base segments from that widget. The new `sha256.lua` module is checked against
+Python's SHA-256, including Unicode and block-padding boundaries. Legacy private
+exact-text tables remain supported for source builds.
+
+The Windows packager is a maintainer tool; players do not need to run it:
+
+```powershell
+python tools/build_release.py --loader-zip .local/ue4ss.zip --readings-json .local/generated/readings.json --output .local/starlit-season-furigana-v0.1.0-alpha.2-windows-x64.zip
+```

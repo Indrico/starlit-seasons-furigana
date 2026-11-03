@@ -49,6 +49,7 @@ function test_step(text) test_text = text; test_loop() end
 class RuntimeGateTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
+        self.lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
         self.lua.execute(FIXTURE)
         self.lua.execute("assert(load(..., '@D:/mod/Scripts/main.lua'))()",
                          (SCRIPTS / 'main.lua').read_text(encoding='utf-8'))

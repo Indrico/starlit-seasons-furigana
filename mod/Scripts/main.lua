@@ -6,6 +6,7 @@ assert(directory, 'Could not resolve the Furigana script directory')
 package.path = directory .. '?.lua;' .. package.path
 
 local Ruby = require('umg_ruby')
+local Lookup = require('reading_lookup')
 local database = dofile(directory .. 'readings.lua')
 local entries = {}
 local enabled = true
@@ -92,8 +93,9 @@ local function inspect(entry)
             once(entry, 'whole_replacement', 'Observed whole-text replacement')
         end
     end
+    if changed then entry.segments = Lookup.get(database, text) end
     entry.last_text = text
-    local segments = database[text]
+    local segments = entry.segments
     if segments then once(entry, 'exact_match', 'Exact original dialogue matched') end
     local has_reading = false
     for _, segment in ipairs(segments or {}) do

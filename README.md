@@ -8,13 +8,13 @@ This is a locally tested alpha for Steam build `8278842` (game 1.61, Unreal Engi
 
 ## Download and usage
 
-Download [v0.1.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.1)
+Download [v0.1.0-alpha.2](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.2)
 and follow the [English usage guide](docs/usage.md).
 
-This first release is a **source and local-build package**, not a drag-and-drop
-binary mod. It includes the renderer, installer, extraction and reading tools,
-tests, and documentation. Download the pinned UE4SS loader separately and generate
-`readings.lua` from your own installed game, following the guide.
+Choose **`starlit-season-furigana-v0.1.0-alpha.2-windows-x64.zip`**. Extract its
+contents next to `StarlitSeason.exe`, run **Check-Furigana.cmd**, and launch through
+Steam. **No Python, build steps, extraction, or separate loader download are needed.**
+The package includes the pinned UE4SS loader and prebuilt kana annotations.
 
 If the mod is already installed, launch the game through Steam and press **F7**
 to toggle furigana. Reinstallation is not required to use the existing setup.
@@ -26,7 +26,10 @@ to toggle furigana. Reinstallation is not required to use the existing setup.
 - 362 records retain unresolved cases. Zero complete records have been manually reviewed; automatic coverage is not a reading-accuracy score.
 - Ordinary dialogue, two-line font fitting, and three answer choices have been observed in the game. See [runtime verification](docs/runtime.md) for the exact checks and remaining limits.
 
-Only source code, synthetic test fixtures, and documentation belong in this repository. Game archives, extracted dialogue, generated lookup tables, encryption keys, loaders, saves, and analysis dumps stay local.
+Git contains source code, synthetic test fixtures, and documentation. The release
+ZIP bundles UE4SS with its license and an annotation-only table of source hashes,
+positions, and kana. Game archives, original dialogue, private reading tables,
+encryption keys, saves, and analysis dumps remain local.
 
 ## Set up the reading tools
 
@@ -56,9 +59,12 @@ The generator accepts a JSON array or JSONL records with `asset`, `row_id`, and 
 
 Japanese dialogue and answer choices retain their original wording, with kana above annotated kanji. Menus, profiles, and lyrics are outside this version's scope. Unsupported markup, substituted text without an exact source match, and layouts that cannot fit remain in the native renderer. Automatic readings can be wrong, especially names, counters, and context-dependent words.
 
-The installer backs up and disables the known English patch and can restore it during removal. Original executables and base PAK archives remain intact. Generated readings and the pinned loader must be prepared locally; this source repository does not include a binary mod bundle.
+The checker backs up and disables the known English patch and can restore it
+during removal. Original executables and base PAK archives remain intact. The
+Windows release asset includes the runtime; GitHub's automatic source archives
+are intended for the optional developer workflow.
 
-## Local workflow
+## Optional source-build workflow
 
 1. Start the installed game normally through Steam and follow [asset extraction](docs/asset-extraction.md) to prepare a private Japanese corpus and character readings.
 2. Generate the local reading table using [the reading pipeline](docs/reading-pipeline.md).
@@ -76,10 +82,13 @@ The [reverse-engineering notes](docs/reverse-engineering.md) describe the eviden
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tools/readings -v
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tools/extraction -v
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tools -p test_install_mod.py -v
+& '.\.venv\Scripts\python.exe' -m unittest discover -s tools -p test_portable_release.py -v
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 ```
 
 The tests use synthetic data and do not require or launch the game. In-game verification is recorded separately.
 
-The local validation run passed 46 tests: 11 reading, 6 extraction, 11 installer,
-and 18 layout/runtime-gate tests.
+The current validation run passed 60 tests: 11 reading, 6 extraction, 11 Python
+installer, 7 Windows package/helper, and 25 Lua lookup/layout/runtime-gate tests.
+The prebuilt table was also checked against all 53,567 distinct local source
+strings, including 49,749 entries with readings.
