@@ -20,7 +20,8 @@ local function canvas(widget, depth)
     end
 end
 function M.new(settings, toggle)
-    return setmetatable({settings = settings, toggle = toggle, entries = {}}, Menu)
+    return setmetatable({settings = settings, toggle = toggle, entries = {},
+        owners = require('object_registry').new({'/Script/imal.WidgetOptionTop'})}, Menu)
 end
 function Menu:attach(owner)
     local root = canvas(owner.WidgetTree.RootWidget, 0)
@@ -60,21 +61,23 @@ function Menu:tick()
     for address, entry in pairs(self.entries) do
         if not valid(entry.owner) or not valid(entry.button) then self.entries[address] = nil end
     end
-    for _, owner in ipairs(FindAllOf('WidgetOptionTop') or {}) do
+    for _, owner in pairs(self.owners:objects()) do
         if valid(owner) and owner:IsInViewport() and owner:IsVisible() and
             owner:GetFullName():find('/Engine/Transient.', 1, true) then
             local address = owner:GetAddress()
             if not self.entries[address] then self.entries[address] = self:attach(owner) end
         end
     end
-    local text_library = next(self.entries) and required('/Script/Engine.Default__KismetTextLibrary')
+    if next(self.entries) and not self.text_library then
+        self.text_library = required('/Script/Engine.Default__KismetTextLibrary')
+    end
     for _, entry in pairs(self.entries) do
         if entry.owner:IsVisible() and entry.button:GetOnClickedSignal(true) then
             self.toggle(self.settings.enabled == false)
         end
         local state = self.settings.enabled ~= false
         if entry.state ~= state then
-            entry.label:SetText(text_library:Conv_StringToText('Furigana Mod: ' .. (state and 'ON' or 'OFF') .. '  [F8]'))
+            entry.label:SetText(self.text_library:Conv_StringToText('Furigana Mod: ' .. (state and 'ON' or 'OFF') .. '  [F8]'))
             entry.state = state
         end
     end

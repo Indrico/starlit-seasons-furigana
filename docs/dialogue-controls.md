@@ -1,8 +1,8 @@
 # Manual dialogue and fixed-size furigana
 
-This describes the v0.2 development implementation on `main`. The published
+This describes v0.2.0-alpha.1. The historical
 [v0.1.0-alpha.2 package](releases/v0.1.0-alpha.2.md) keeps its earlier behavior.
-Performance profiling and optimization are a separate, deferred milestone.
+See [performance measurements](performance.md) for the optimized runtime.
 
 ## Controls
 
@@ -88,15 +88,14 @@ private reading input and pinned loader:
 python tools/build_release.py --loader-zip .local/ue4ss.zip --readings-json .local/generated/readings.json --native-dll .local/build/StarlitFuriganaNative.dll --output .local/starlit-season-furigana-v0.2.0-alpha.1-windows-x64.zip
 ```
 
-The candidate contains 21 runtime files and five helper files. Keep the
-published alpha.2 ZIP/tag immutable. The planned public v0.2 release remains
-pending the deferred performance milestone and remaining compatibility checks.
-See the [local candidate record](releases/v0.2.0-alpha.1-candidate.md) for its checksum.
+The package contains 22 runtime files and five helper files. Keep published
+historical ZIPs and tags immutable. See the
+[release notes](releases/v0.2.0-alpha.1.md) for checksums and tested scope.
 
 ## Verification scope
 
 See [runtime verification](runtime.md) for the actual in-game evidence. The
-automated suites contain 82 tests: 46 Lua integration/layout/lookup/controller/menu
+automated suites contain 93 tests: 57 Lua integration/layout/lookup/controller/menu/performance
 tests, 12 Python installer tests, seven Windows portable tests, 11 reading
 tests, and six extraction tests. Tests use synthetic fixtures and establish
 neither full-game compatibility nor a frame-time improvement.

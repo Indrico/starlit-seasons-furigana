@@ -6,21 +6,22 @@ For AI contributors, [AGENTS.md](AGENTS.md) records the implementation, release 
 
 This targets Steam build `8278842` (game 1.61, Unreal Engine 4.24), using UE4SS and the game's original font. The current development implementation adds manual dialogue, immediate complete furigana, and fixed font sizes. **F6** switches manual/automatic progression; **F7** toggles furigana. See [dialogue controls and preferences](docs/dialogue-controls.md).
 
-The published **v0.1.0-alpha.2** ZIP below retains its original typewriter and
-250 ms stability wait. The v0.2 implementation is being verified separately;
-stuttering optimization is deferred and no performance improvement is claimed.
+The **v0.2.0-alpha.1** prerelease includes the compiled bridge, compact dialogue,
+an Options master switch, logo skipping, and performance improvements. See the
+[measurement report](docs/performance.md) for results and their limits.
 
 ![Current development layout at 1920 by 1080](docs/images/compact-dialogue-1080p.jpg)
 
 ## Download and usage
 
-Download [v0.1.0-alpha.2](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.2)
+Download [v0.2.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.2.0-alpha.1)
 and follow the [English usage guide](docs/usage.md).
 
-Choose **`starlit-season-furigana-v0.1.0-alpha.2-windows-x64.zip`**. Extract its
+Choose **`starlit-season-furigana-v0.2.0-alpha.1-windows-x64.zip`**. Extract its
 contents next to `StarlitSeason.exe`, run **Check-Furigana.cmd**, and launch through
 Steam. **No Python, build steps, extraction, or separate loader download are needed.**
-The package includes the pinned UE4SS loader and prebuilt kana annotations.
+The package includes the pinned UE4SS loader, native DLL, and prebuilt kana annotations.
+For an upgrade, close the game and uninstall the previous managed version first.
 
 If the mod is already installed, launch the game through Steam and press **F7**
 to toggle furigana. Reinstallation is not required to use the existing setup.
@@ -30,7 +31,7 @@ to toggle furigana. Reinstallation is not required to use the existing setup.
 - Original Japanese dialogue was extracted locally from 163 CML DataTables: 59,361 records and 53,567 unique texts.
 - The offline pipeline generated candidate readings for 258,766 of 259,130 visible kanji characters in those unique texts, approximately 99.86%.
 - 362 records retain unresolved cases. Zero complete records have been manually reviewed; automatic coverage is not a reading-accuracy score.
-- The v0.2 development build has been observed at 1920 by 1080 with fixed 29/14 text, compact native-width dialogue, manual/automatic progression, an Options master switch, and startup-logo skipping. Performance work remains deferred. See [runtime verification](docs/runtime.md) for evidence and limits.
+- The v0.2 build has been observed at 1920 by 1080 with fixed 29/14 text, compact native-width dialogue, manual/automatic progression, an Options master switch, and startup-logo skipping. See [runtime verification](docs/runtime.md) and [performance measurements](docs/performance.md) for evidence and limits.
 
 Git contains source code, synthetic test fixtures, and documentation. The release
 ZIP bundles UE4SS with its license and an annotation-only table of source hashes,
@@ -94,7 +95,7 @@ The [reverse-engineering notes](docs/reverse-engineering.md) describe the eviden
 
 The tests use synthetic data and do not require or launch the game. In-game verification is recorded separately.
 
-The current validation run passed 82 tests: 11 reading, 6 extraction, 12 Python
-installer, 7 Windows package/helper, and 46 Lua lookup/layout/runtime/controller/menu tests.
+The current validation run passed 93 tests: 11 reading, 6 extraction, 12 Python
+installer, 7 Windows package/helper, and 57 Lua lookup/layout/runtime/controller/menu/performance tests.
 The prebuilt table was also checked against all 53,567 distinct local source
 strings, including 49,749 entries with readings.

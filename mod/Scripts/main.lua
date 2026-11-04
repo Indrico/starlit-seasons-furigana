@@ -18,9 +18,7 @@ local database = dofile(directory .. 'readings.lua')
 local entries = {}
 local enabled = true
 local master_enabled = settings.enabled ~= false
-local queued = false
-local iteration = 0
-local discovered = false
+local commands = {}
 local menu = require('mod_menu').new(settings, function(value) StarlitFuriganaSetEnabled(value) end)
 local startup = require('startup')
 
@@ -44,28 +42,38 @@ local function is_dialogue_source(object)
     return false, name
 end
 
-local function discover()
-    for _, class_name in ipairs({'RichTextBlock', 'TextBlock'}) do
-        for _, object in ipairs(FindAllOf(class_name) or {}) do
-            if object:IsValid() and not Ruby.is_generated(object) then
-                local selected, name = is_dialogue_source(object)
-                if selected then
-                    local address = object:GetAddress()
-                    local entry = entries[address]
-                    if not entry or entry.name ~= name then
-                        if entry and entry.renderer then entry.renderer:detach() end
-                        entries[address] = {source = object, name = name, class_name = class_name, notes = {}}
-                        log('Discovered ' .. name)
-                    end
-                end
-            end
-        end
+local Registry = require('object_registry')
+local owners = Registry.new({'/Script/imal.WidgetCommuScriptMessage', '/Script/imal.WidgetCommuScriptCinema',
+    '/Script/imal.WidgetCommuScriptNovel'})
+local sources = Registry.new({'/Script/UMG.RichTextBlock', '/Script/UMG.TextBlock'}, function(object)
+    return not Ruby.is_generated(object) and is_dialogue_source(object)
+end)
+
+local function register_source(object)
+    local address = object:GetAddress()
+    local name = object:GetFullName()
+    local entry = entries[address]
+    if not entry or entry.name ~= name then
+        if entry and entry.renderer then entry.renderer:detach() end
+        entry = {source = object, name = name, notes = {}}
+        entries[address] = entry
     end
-    discovered = true
+    return entry
+end
+
+local function discover()
+    for _, object in pairs(sources:objects()) do
+        register_source(object)
+    end
 end
 
 local function once(entry, key, message)
-    if not entry.notes[key] then entry.notes[key] = true; log(message .. ': ' .. entry.name) end
+    if not entry.notes[key] then
+        entry.notes[key] = true
+        if key:find('failed', 1, true) or key:find('error', 1, true) or key:find('refused', 1, true) then
+            log(message .. ': ' .. entry.name)
+        end
+    end
 end
 
 local function options_for(entry)
@@ -98,7 +106,8 @@ end
 local function inspect(entry, immediate)
     if not master_enabled then return end
     if native_ready and not entry.native_generation and not entry.choice_ready then return end
-    local text = entry.source:GetText():ToString()
+    -- Native assignment/choice events own the text. Idle ticks only check geometry.
+    local text = native_ready and not immediate and entry.last_text or entry.source:GetText():ToString()
     local changed = text ~= entry.last_text
     if changed then
         -- Remove the previous line before waiting for the native reveal to finish.
@@ -175,26 +184,17 @@ function StarlitFuriganaNativeLine(widget_address, generation, expected_text)
     if not master_enabled then return end
     StarlitFuriganaNativeClear()
     controller:set_line(nil, expected_text)
-    local owner
-    for _, class_name in ipairs({'WidgetCommuScriptMessage', 'WidgetCommuScriptCinema', 'WidgetCommuScriptNovel'}) do
-        for _, object in ipairs(FindAllOf(class_name) or {}) do
-            if object:IsValid() and object:GetAddress() == widget_address then owner = object; break end
-        end
-        if owner then break end
-    end
-    discover()
+    local owner = owners:find(widget_address)
     if owner then
         for _, field_name in ipairs({'_TextMessage', '_TextMonologue', '_TextBase'}) do
             local ok, source = pcall(function() return owner[field_name] end)
             if ok and source and source:IsValid() and source:GetText():ToString() == expected_text then
-                local entry = entries[source:GetAddress()]
+                local entry = is_dialogue_source(source) and register_source(source)
                 if entry then
                     entry.owner, entry.native_generation, entry.last_attempt_key = owner, generation, nil
                     if entry.renderer and entry.renderer.options then entry.renderer.options.owner = owner end
                     inspect(entry, true)
                     if entry.applied then controller:set_line(entry.renderer, expected_text) end
-                    log('Prepared native line ' .. tostring(generation) .. ', characters=' .. tostring(utf8.len(expected_text)) ..
-                        ', pages=' .. tostring(entry.renderer and entry.renderer.pages and #entry.renderer.pages or 1))
                     return
                 end
             end
@@ -257,16 +257,18 @@ function StarlitFuriganaSetEnabled(value)
 end
 
 local function tick()
-    iteration = iteration + 1
+    local pending = commands
+    commands = {}
+    for _, callback in ipairs(pending) do callback() end
     menu:tick()
     if native_ready then startup.tick(master_enabled) end
-    if not master_enabled then return end
-    if not discovered or iteration % 8 == 0 then discover() end
+    discover()
+    owners:objects()
     for address, entry in pairs(entries) do
-        if not entry.source:IsValid() then
+        if not entry.source:IsValid() or entry.source:GetFullName() ~= entry.name then
             if entry.renderer then entry.renderer:detach() end
             entries[address] = nil
-        else
+        elseif master_enabled then
             local ok, error_message = pcall(inspect, entry)
             if not ok then
                 if entry.renderer then entry.renderer:hide(); entry.applied = false end
@@ -276,53 +278,46 @@ local function tick()
     end
 end
 
-if Key.F6 then RegisterKeyBind(Key.F6, function()
-    ExecuteInGameThread(function()
-        if not master_enabled then log('Enable the mod in Options before changing dialogue mode.'); return end
-        if not native_ready then log('Manual/auto control is unavailable without the supported native bridge.'); return end
-        controller:set_manual(not controller.manual)
-        local ok, message = Settings.save(settings_path, settings)
-        if not ok then log('Could not save user preferences: ' .. tostring(message)) end
-        log(controller.manual and 'Manual dialogue: press the normal advance input to continue.' or 'Automatic dialogue enabled.')
-    end)
-end) end
+-- Input callbacks only queue work. Never allocate game-thread callback refs
+-- from an async/input thread while UE4SS is dispatching another Lua callback.
+local function bind(key, callback)
+    if key then RegisterKeyBind(key, function() commands[#commands + 1] = callback end) end
+end
 
-RegisterKeyBind(Key.F7, function()
-    ExecuteInGameThread(function()
-        if not master_enabled then log('Enable the mod in Options before toggling furigana.'); return end
-        enabled = not enabled
-        for _, entry in pairs(entries) do
-            entry.last_attempt_key, entry.attach_failed = nil, false
-            if not enabled then
-                if entry.renderer then
-                    entry.renderer:detach()
-                    entry.renderer, entry.applied = nil, false
-                end
-            end
-        end
-        if controller and controller.text then controller:set_line(nil, controller.text) end
-        log(enabled and 'Furigana enabled.' or 'Furigana disabled. Original text restored.')
-    end)
+bind(Key.F6, function()
+    if not master_enabled then log('Enable the mod in Options before changing dialogue mode.'); return end
+    if not native_ready then log('Manual/auto control is unavailable without the supported native bridge.'); return end
+    controller:set_manual(not controller.manual)
+    local ok, message = Settings.save(settings_path, settings)
+    if not ok then log('Could not save user preferences: ' .. tostring(message)) end
+    log(controller.manual and 'Manual dialogue: press the normal advance input to continue.' or 'Automatic dialogue enabled.')
 end)
 
-if Key.F8 then RegisterKeyBind(Key.F8, function()
-    ExecuteInGameThread(function() menu:toggle_visible() end)
-end) end
-
-LoopAsync(250, function()
-    if not queued then
-        queued = true
-        ExecuteInGameThread(function()
-            local ok, error_message = pcall(tick)
-            queued = false
-            if not ok then log('Discovery paused by an error: ' .. tostring(error_message)); discovered = false end
-        end)
+bind(Key.F7, function()
+    if not master_enabled then log('Enable the mod in Options before toggling furigana.'); return end
+    enabled = not enabled
+    for _, entry in pairs(entries) do
+        entry.last_attempt_key, entry.attach_failed = nil, false
+        if not enabled then
+            if entry.renderer then
+                entry.renderer:detach()
+                entry.renderer, entry.applied = nil, false
+            end
+        end
     end
-    return false
+    if controller and controller.text then controller:set_line(nil, controller.text) end
+    log(enabled and 'Furigana enabled.' or 'Furigana disabled. Original text restored.')
+end)
+
+bind(Key.F8, function() menu:toggle_visible() end)
+
+LoopInGameThreadWithDelay(250, function()
+    local ok, error_message = pcall(tick)
+    if not ok then log('Discovery paused by an error: ' .. tostring(error_message)) end
 end)
 
 if bridge then
-    ExecuteWithDelay(1000, function() ExecuteInGameThread(bridge.initialize) end)
+    ExecuteInGameThreadWithDelay(1000, bridge.initialize)
 else
     log('Native bridge unavailable; using the legacy renderer: ' .. tostring(bridge_error))
 end

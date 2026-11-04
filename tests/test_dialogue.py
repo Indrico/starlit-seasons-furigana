@@ -120,11 +120,12 @@ NATIVE_FIXTURE = r'''
 test_keys, test_options = {}, nil
 function RegisterKeyBind(key, callback) test_keys[key] = callback end
 Key.F6 = 117
-function ExecuteWithDelay(_, callback) callback() end
+function ExecuteInGameThreadWithDelay(_, callback) callback() end
 local old_find = FindAllOf
 local owner = {_TextMessage=source}
 function owner:IsValid() return true end
 function owner:GetAddress() return 456 end
+function owner:GetFullName() return 'WidgetCommuScriptMessage /Engine/Transient.SyntheticOwner' end
 function FindAllOf(name) return name == 'WidgetCommuScriptMessage' and {owner} or old_find(name) end
 package.loaded.settings = {
     load=function() return {manual=true,auto_min_seconds=3,auto_characters_per_second=8} end,
@@ -182,9 +183,12 @@ class NativeEventTests(unittest.TestCase):
 
     def test_f6_saves_mode_and_f7_remains_independent(self):
         self.state.test_keys[117]()
+        self.assertIsNone(self.state.test_saved)
+        self.state.test_loop()
         self.assertTrue(self.state.test_saved)
         self.line('学校')
         self.state.test_keys[118]()
+        self.state.test_loop()
         self.assertEqual(self.state.test_detaches, 1)
 
     def test_master_off_restores_text_and_blocks_native_line_rendering(self):

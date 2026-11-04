@@ -5,7 +5,9 @@ local Layout = require('ruby_layout')
 local M = {}
 local Renderer = {}
 Renderer.__index = Renderer
-local generated = {}
+-- Weak values do not retain expired scene widgets or an ever-growing name map.
+local generated = setmetatable({}, {__mode = 'v'})
+local generated_names = setmetatable({}, {__mode = 'k'})
 
 local function valid(object)
     return object and object:IsValid()
@@ -20,12 +22,15 @@ end
 local function create(class, outer)
     local object = StaticConstructObject(class, outer)
     assert(valid(object), 'Could not construct ' .. class:GetFullName())
-    generated[object:GetAddress()] = object:GetFullName()
+    generated[object:GetAddress()] = object
+    generated_names[object] = object:GetFullName()
     return object
 end
 
 function M.is_generated(object)
-    return valid(object) and generated[object:GetAddress()] == object:GetFullName()
+    if not valid(object) then return false end
+    local made = generated[object:GetAddress()]
+    return valid(made) and generated_names[made] == object:GetFullName()
 end
 
 function M.attach(source, options)
@@ -48,12 +53,14 @@ function M.attach(source, options)
     assert(valid(source_slot) and source_slot:IsA('/Script/UMG.CanvasPanelSlot'),
         'The source text or its single-child VerticalBox must occupy a CanvasPanelSlot')
     local self = setmetatable({
-        source = source, source_slot = source_slot, anchor_source = anchor_source,
+        source = source, source_name = source:GetFullName(), source_slot = source_slot, anchor_source = anchor_source,
         vertical_box_slot = vertical_box_slot, parent = parent, outer = source:GetOuter(),
-        options = options, widgets = {}, widths = {}, heights = {}, previous_text = nil,
+        options = options, widgets = {}, widths = {}, width_keys = {}, width_cursor = 1,
+        heights = {}, previous_text = nil,
         shifted_slots = {}, native_images = {},
         text_class = required('/Script/UMG.TextBlock'),
         text_library = required('/Script/Engine.Default__KismetTextLibrary'),
+        layout_library = required('/Script/UMG.Default__WidgetLayoutLibrary'),
         original_opacity = source.RenderOpacity,
     }, Renderer)
     self.font = options.font
@@ -98,6 +105,7 @@ function M.attach(source, options)
     -- struct can change. Preserve the base outline before measuring any ruby.
     self.base_outline = tonumber(self.font.OutlineSettings.OutlineSize) or 0
     self.host = create(canvas_class, self.outer)
+    self.host_name = self.host:GetFullName()
     self.host:SetVisibility(3) -- HitTestInvisible: preserve choice buttons below.
     self.slot = parent:AddChildToCanvas(self.host)
     assert(valid(self.slot), 'Could not attach ruby CanvasPanel')
@@ -154,9 +162,14 @@ function Renderer:_measure(text, size, role)
         self:_set_text(self.measure_widget, text, size, role)
         self.measure_widget:InvalidateLayoutAndVolatility()
         self.measure_widget:ForceLayoutPrepass()
-        self.canvas:ForceLayoutPrepass()
         local size_box = self.measure_widget:GetDesiredSize()
         self.measure_widget:SetVisibility(1)
+        -- Font/style belong to this renderer; widths are in local Slate units,
+        -- independent of viewport scaling. Keep at most 2048 measured strings.
+        local expired = self.width_keys[self.width_cursor]
+        if expired then self.widths[expired] = nil end
+        self.width_keys[self.width_cursor] = key
+        self.width_cursor = self.width_cursor % 2048 + 1
         self.widths[key] = size_box.X
         self.heights[font_key] = math.max(self.heights[font_key] or 0, size_box.Y)
     end
@@ -199,13 +212,14 @@ function Renderer:_sync_slot()
     end
 end
 
-function Renderer:_pooled(index)
+function Renderer:_pooled(index, reading)
     if not self.widgets[index] then
         local base, base_slot = self:_text_widget()
-        local ruby, ruby_slot = self:_text_widget()
-        self.widgets[index] = {base = base, base_slot = base_slot, ruby = ruby, ruby_slot = ruby_slot}
+        self.widgets[index] = {base = base, base_slot = base_slot}
     end
-    return self.widgets[index]
+    local pair = self.widgets[index]
+    if reading and not pair.ruby then pair.ruby, pair.ruby_slot = self:_text_widget() end
+    return pair
 end
 
 function Renderer:_source_visible()
@@ -220,7 +234,7 @@ end
 
 function Renderer:_expanded_size(size)
     if not self.options.expand_dialogue then return size end
-    local library = required('/Script/UMG.Default__WidgetLayoutLibrary')
+    local library = self.layout_library
     local viewport = library:GetViewportSize(self.source)
     local scale = library:GetViewportScale(self.source)
     assert(scale and scale > 0 and viewport.X > 0 and viewport.Y > 0, 'Viewport is not ready')
@@ -355,21 +369,31 @@ function Renderer:_expand_plate(original, size)
 end
 
 function Renderer:geometry_key()
-    if not valid(self.source) or not valid(self.parent) then return nil end
+    if not self:_valid_source() or not valid(self.parent) then return nil end
     local layout = self.source_slot.LayoutData
     local o, a, n, x = layout.Offsets, layout.Alignment, layout.Anchors.Minimum, layout.Anchors.Maximum
     local t = self.source.RenderTransform
     local padding = self:_padding()
-    local size = self:_size()
+    local size = self:_expanded_size(self:_size())
     return string.format('%.2f:%.2f:%.2f:%.2f:%.2f:%.2f:%.3f:%.3f:%.3f:%.3f:%.2f:%.2f:%.3f:%.3f:%.3f:%.2f:%.2f:%.2f:%.2f:%s',
         o.Left, o.Top, size.X, size.Y, a.X, a.Y, n.X, n.Y, x.X, x.Y,
         t.Translation.X, t.Translation.Y, t.Scale.X, t.Scale.Y, t.Angle,
-        padding.Left, padding.Top, padding.Right, padding.Bottom, tostring(self:_source_visible()))
+        padding.Left, padding.Top, padding.Right, padding.Bottom, tostring(self:_source_visible())) ..
+        ':' .. tostring(self.layout_library:GetViewportScale(self.source))
+end
+
+function Renderer:_valid_source()
+    return valid(self.source) and self.source:GetFullName() == self.source_name
+end
+
+function Renderer:_valid_host()
+    return valid(self.host) and self.host:GetFullName() == self.host_name
 end
 
 function Renderer:hide()
-    if valid(self.host) then self.host:SetVisibility(1) end
-    if valid(self.source) then self.source:SetRenderOpacity(self.original_opacity) end
+    if self:_valid_host() then self.host:SetVisibility(1) end
+    if not self:_valid_source() then self.previous_text = nil; return end
+    self.source:SetRenderOpacity(self.original_opacity)
     local blur = self.native_blur
     if blur and valid(blur.slot) then
         blur.slot:SetAnchors(blur.anchors)
@@ -393,16 +417,21 @@ end
 
 function Renderer:detach()
     self:hide()
-    if valid(self.host) then self.host:RemoveFromParent() end
+    if self:_valid_host() then self.host:RemoveFromParent() end
 end
 
 function Renderer:update(segments, visible_count)
-    if not valid(self.source) or not valid(self.parent) then return false, 'Source widget expired' end
+    if not self:_valid_source() or not valid(self.parent) then return false, 'Source widget expired' end
     if not self.options.prepare_hidden and not self:_source_visible() then self:hide(); return false, 'Source widget or its ancestor is hidden' end
     local source_text = Layout.text(segments)
     if source_text:find('<[^>]+>') then
         self:hide()
         return false, 'Rich-text markup requires a style-preserving parser'
+    end
+    local scale = self.layout_library:GetViewportScale(self.source)
+    if self.measure_scale ~= scale then
+        self.widths, self.width_keys, self.width_cursor, self.heights = {}, {}, 1, {}
+        self.measure_scale = scale
     end
     local original_size = self:_size()
     local size = self:_expanded_size(original_size)
@@ -474,7 +503,7 @@ function Renderer:update(segments, visible_count)
 end
 
 function Renderer:show_page(number)
-    assert(valid(self.source) and valid(self.parent), 'Source widget expired')
+    assert(self:_valid_source() and valid(self.parent), 'Source widget expired')
     local result = assert(self.pages[number], 'Invalid dialogue page')
     self.page_index = number
     local margin, original_height = self.active_margin, self.original_height
@@ -495,7 +524,7 @@ function Renderer:show_page(number)
         if alignment == 3 then vertical_offset = math.max(0, original_height - result.height) end
     end
     for index, run in ipairs(result.runs) do
-        local pair = self:_pooled(index)
+        local pair = self:_pooled(index, run.reading)
         local base_size = run.base_size
         local ruby_size_scaled = run.ruby_size
         if pair.base_text ~= run.base or pair.base_size ~= base_size then
@@ -519,13 +548,13 @@ function Renderer:show_page(number)
                 pair.ruby_x, pair.ruby_y = ruby_x, ruby_y
             end
             pair.ruby:SetVisibility(3)
-        else
+        elseif pair.ruby then
             pair.ruby:SetVisibility(1)
         end
     end
     for index = #result.runs + 1, #self.widgets do
         self.widgets[index].base:SetVisibility(1)
-        self.widgets[index].ruby:SetVisibility(1)
+        if self.widgets[index].ruby then self.widgets[index].ruby:SetVisibility(1) end
     end
     if self.options.expand_dialogue then
         if not self.page_indicator then self.page_indicator, self.indicator_slot = self:_text_widget() end

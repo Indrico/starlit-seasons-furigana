@@ -37,8 +37,7 @@ function dofile() return {
     ['はい'] = {{base = 'はい'}},
 } end
 function FindAllOf(name) return name == 'RichTextBlock' and {source} or {} end
-function ExecuteInGameThread(callback) callback() end
-function LoopAsync(_, callback) test_loop = callback end
+function LoopInGameThreadWithDelay(_, callback) test_loop = callback end
 function RegisterKeyBind(_, callback) test_toggle = callback end
 Key = {F7 = 118}
 function print() end

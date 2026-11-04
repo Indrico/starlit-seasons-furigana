@@ -48,13 +48,17 @@ On 2026-11-04, the supported build was sampled in an actual 1920 by 1080 client:
   enabling it again restored the compact layout. The original blur follows the
   new window bounds, preventing a blurred strip beneath the shorter window.
 
-Performance profiling/optimization is explicitly deferred. Discovery and polling
-still run; these changes are not evidence of improved frame times. Physical
-controller input, normal-play branching choices, all cinema/novel/DLC paths,
-long sessions, and a complete playthrough remain unverified. A successful source
-match does not establish visual correctness for every widget family.
+The performance update replaces recurring global scans with registered objects,
+uses game-thread timers and queued shortcuts, bounds font measurements, and
+allocates ruby TextBlocks only when needed. Three 120-second held-line captures
+reduced p99 from 59.715–60.119 ms to 6.849–6.858 ms on the local machine. A separate
+automatic-progression capture also removed the recurring >50 ms spikes.
+See [the performance report](performance.md) for methodology, stability findings,
+and the limits of these measurements. Physical controller input, normal-play
+branching choices, all cinema/novel/DLC paths, and a complete playthrough remain
+unverified. A source match does not establish visual correctness for every family.
 
-There are 82 automated tests: 46 Lua lookup/layout/runtime/controller/menu tests,
+There are 93 automated tests: 57 Lua lookup/layout/runtime/controller/menu/performance tests,
 12 Python installer tests, seven Windows portable tests, 11 reading tests, and
 six extraction tests. They use synthetic inputs. Runtime tests establish control
 flow rather than full-game compatibility, voice correctness, or crash safety.
@@ -63,13 +67,31 @@ flow rather than full-game compatibility, voice correctness, or crash safety.
 
 ![Compact fixed-size dialogue at 1920 by 1080](images/compact-dialogue-1080p.jpg)
 
-The local [functional candidate](releases/v0.2.0-alpha.1-candidate.md) bundles
+The earlier local [functional candidate](releases/v0.2.0-alpha.1-candidate.md) bundled
 21 runtime files and five helpers. The final renderer was checked in-game,
 including F7 restoration and a subsequent multiline native line. Its exact ZIP
 then passed clean installation and runtime hash checks. Removal restored both
 English-patch files with identical hashes and preserved user preferences; the
 final ZIP was installed again. The Shipping EXE hash stayed unchanged. No private
 inspection helpers or original game assets are included.
+
+The optimized package adds `object_registry.lua`, bringing the runtime to 22
+owned files plus five helpers. Current packaging and runtime checks are recorded
+in the [v0.2.0-alpha.1 release notes](releases/v0.2.0-alpha.1.md).
+
+The exact optimized ZIP passed clean portable preparation, a Steam launch with
+the native bridge ready, complete compact furigana, a held manual line through
+a 120-second frame capture, F7 native-background/blur restoration and return,
+and F6 automatic progression followed by manual restoration. Its uninstrumented
+held-line p99 was 6.848 ms, with a 10.625 ms maximum and no >33.33 ms intervals.
+Removal restored both known English-patch files with hashes matching the saved
+state; preferences also retained their hash. The same ZIP was reinstalled and
+checked again. Its 27 members matched the owned manifest and source scripts;
+no private profiler or extra inspection mod was installed. The supported Shipping
+EXE SHA-256 remained unchanged.
+After reinstallation, a second Steam launch reached Press Any Button; the Options
+master button switched off through mouse input and back on through F8. Final
+preferences were enabled/manual, the checker passed again, and the game was closed.
 
 ## Published alpha.2 behavior and historical verification
 

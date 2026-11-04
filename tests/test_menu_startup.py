@@ -44,7 +44,7 @@ class MenuStartupTests(unittest.TestCase):
                 SetRenderOpacity=function(_, value) opacity=value end,
                 IsEndFlow=function() return logo_index >= 5 end,
                 SetNextFlow=function() logo_index=logo_index+1 end}
-            state = {Phase=2, WBP_Logo=logo, IsValid=function() return true end,
+            state = {Phase=2, WBP_Logo=logo, IsValid=function() return true end, GetAddress=function() return 20 end,
                 GetFullName=function() return 'BP_TitleStateLogo_C /Game/Maps/LEVEL_Root:PersistentLevel.Logo' end}
             function FindAllOf() return {state} end
             startup = require('startup')

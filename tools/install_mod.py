@@ -25,7 +25,8 @@ MOD_REL = f"{BIN_REL}/ue4ss/Mods/StarlitFurigana/Scripts"
 PATCH_REL = "StarlitSeason/Content/Paks/~mods"
 PATCH_NAMES = ("pakchunk99-EngPatch.pak", "pakchunk99-EngPatch.sig")
 SCRIPT_NAMES = ("main.lua", "umg_ruby.lua", "ruby_layout.lua", "reading_lookup.lua", "sha256.lua",
-                "native_bridge.lua", "dialogue_controller.lua", "settings.lua", "mod_menu.lua", "startup.lua")
+                "native_bridge.lua", "dialogue_controller.lua", "settings.lua", "mod_menu.lua", "startup.lua",
+                "object_registry.lua")
 
 
 class InstallError(RuntimeError):

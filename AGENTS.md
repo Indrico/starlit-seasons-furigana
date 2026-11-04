@@ -8,9 +8,9 @@ in **English**.
 
 ## Current development milestone
 
-`main` now contains the v0.2 functional implementation. The published player
-release is still alpha.2; the v0.2 public release remains pending performance
-work and remaining verification. Do not overwrite historical release assets.
+`main` contains the v0.2 functional implementation and performance changes.
+The player prerelease is **v0.2.0-alpha.1**; verify its GitHub metadata and asset
+checksum before installation. Do not overwrite historical release assets.
 The user's local `plan.md` is intentionally untracked.
 
 - Default manual dialogue; F6 switches manual/automatic progression and persists
@@ -30,8 +30,12 @@ The user's local `plan.md` is intentionally untracked.
 - Writable preferences are `StarlitFurigana/user-settings.ini` under the game
   root: `enabled`, `manual`, `auto_min_seconds`, `auto_characters_per_second`.
   Preserve them during uninstall and keep them outside owned-file hashes.
-- **Performance profiling/optimization (plan section 4) is deferred.** Existing
-  global discovery/polling is still present. Do not claim reduced stuttering.
+- Performance work replaces recurring discovery with one initial class
+  snapshot plus construction notifications; native lines resolve registered
+  owners directly. Timers run on the game thread, input queues commands, and
+  each renderer bounds measurement state. Read [performance evidence](docs/performance.md)
+  before making timing claims. Earlier profiling exposed callback-reference
+  crashes in an async scheduling pattern, also present in the old baseline.
 
 Read [dialogue controls](docs/dialogue-controls.md), [native bridge notes](native/README.md),
 and the current section of [runtime verification](docs/runtime.md) first.
@@ -63,9 +67,10 @@ and the current section of [runtime verification](docs/runtime.md) first.
   a checker, uninstaller, pinned loader, and prebuilt annotations.
 - Added a build-locked native bridge, manual/auto state, fixed-size pagination,
   persistent master control, compact ruby layout, and startup-logo skipping.
-- Published **[v0.1.0-alpha.2](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.2)**
-  as a prerelease. It replaces the source-only installation experience of
-  `v0.1.0-alpha.1`; the older release remains available historically.
+- Published **[v0.2.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.2.0-alpha.1)**
+  with the native bridge, compact fixed-size layout, persistent controls, startup
+  skipping, and measured performance improvements. Older releases remain
+  available historically.
 
 Implementation history:
 
@@ -74,10 +79,11 @@ Implementation history:
 | `08599b8` | Initial dialogue/choice mod, extraction, readings, installer, and tests |
 | `b1bae42` | First alpha release documentation and English usage guide |
 | `da2fa2d` | Tested drag-and-drop Windows package and annotation-only lookup |
+| `f013ad5` | Functional v0.2 compact dialogue, controls, and startup implementation |
 
 The public repository is
 `https://github.com/Indrico/starlit-seasons-furigana.git`, with development on
-`main`. The `v0.1.0-alpha.2` tag points to
+`main`. Read the current tag on GitHub; historical `v0.1.0-alpha.2` points to
 `da2fa2d2fbb74945bff343c2ad3ed128c74d8e22`.
 
 ## Supported target and release
@@ -93,22 +99,24 @@ The public repository is
   `75dc8b081d324fe0598a87b26e37d13a84d3648cbb1d08eb48c514376407a11b`.
   The experimental URL can change; verify the hash and do not substitute a
   newer loader without compatibility testing.
-- Player asset: `starlit-season-furigana-v0.1.0-alpha.2-windows-x64.zip`.
-  Published ZIP SHA-256:
-  `321bdfdf86bc650bf297a0d54d977e8949134690f60d58fd9df8862318f939b1`.
+- Player asset: `starlit-season-furigana-v0.2.0-alpha.1-windows-x64.zip`.
+  ZIP SHA-256:
+  `8664e5c4467c14d8d24fcd167dabb0d195f8e50b721ceda7a83c0e1104de0904`.
 
-For the published alpha.2, extract all ZIP contents next to `StarlitSeason.exe`,
+Extract all ZIP contents next to `StarlitSeason.exe`,
 run `Check-Furigana.cmd` with the game closed, then launch through Steam.
-Furigana starts enabled; **F7** toggles it. The package contains 14 owned runtime
-files plus five helper files. UE4SS's original MIT license is included.
-The v0.2 candidate packager includes 21 runtime files and five helpers,
-including a precompiled native bridge and MinHook's license.
+Furigana starts enabled and dialogue is manual; F6 changes progression and F7
+toggles annotations. OPTION contains the master switch (F8 while open).
+The package contains 22 owned runtime files and five helpers, including the
+precompiled bridge, UE4SS's MIT license, and MinHook's license. Uninstall the old
+managed version before an upgrade; preserve preferences.
 
 ## Repository map
 
 | Path | Responsibility |
 | --- | --- |
 | `mod/Scripts/main.lua` | Native events, discovery/fallback, lifecycle, F6/F7/F8, master switch |
+| `mod/Scripts/object_registry.lua` | One initial class scan, queued construction notifications, expired-object cleanup |
 | `mod/Scripts/dialogue_controller.lua` | Manual/auto state, page input and reading timers |
 | `mod/Scripts/settings.lua` | Non-executable preferences outside protected runtime files |
 | `mod/Scripts/mod_menu.lua`, `startup.lua` | Native Options control and logo-flow skipping |
@@ -124,6 +132,7 @@ including a precompiled native bridge and MinHook's license.
 | `tools/readings/export_annotations.py` | Export private readings to shareable hash/span/kana data |
 | `tools/install_mod.py` | Python-managed installation, ownership, backups, rollback, removal |
 | `tools/build_release.py` | Deterministic portable ZIP assembly from private local inputs |
+| `tools/summarize_frametimes.py` | Aggregate PresentMon v1 frame intervals without raw process records |
 | `portable/` | Windows CMD entry points, PowerShell manager, packaged quick-start |
 | `tests/`, `tools/**/test_*.py` | Synthetic source, Lua, installer, and Windows package tests |
 | `docs/` | English usage, technical evidence, limitations, screenshots, release notes |
@@ -214,8 +223,8 @@ python -m venv .venv
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 ```
 
-The current suites contain **82 tests**: 11 reading, 6 extraction, 12
-Python installer, 7 Windows portable, and 46 Lua lookup/layout/runtime/controller/menu
+The current suites contain **93 tests**: 11 reading, 6 extraction, 12
+Python installer, 7 Windows portable, and 57 Lua lookup/layout/runtime/controller/menu/performance
 tests. These use synthetic data without launching the game. Portable tests
 require Windows; Lua tests require the development dependencies.
 
@@ -230,7 +239,7 @@ The exact release ZIP passed a real clean runtime install, Steam launch,
 visible furigana, F7 off/on, removal with identical patch restoration hashes,
 and reinstallation. The published ZIP was downloaded again and checked against
 the tested artifact. See [the verification record](docs/runtime.md) and
-[release notes](docs/releases/v0.1.0-alpha.2.md) for evidence.
+[release notes](docs/releases/v0.2.0-alpha.1.md) for evidence.
 
 For documentation-only changes, check links, commands, and `git diff --check`;
 re-running game tests is unnecessary. For behavior changes, run affected suites
@@ -247,8 +256,9 @@ and perform the relevant in-game checks before expanding compatibility claims.
   **1920 x 1080 client viewport**; check the current runtime record for its scope.
 - Album replays established choice rendering. They did not establish changed
   branches or normal-play choice input; controller input is also unverified.
-- Every cinema/novel/DLC family, long sessions, all skip/auto transitions, and
-  a full playthrough remain unverified. Menus, profiles, and lyrics are out of
+- Every cinema/novel/DLC family, sessions beyond the sampled 38-minute run,
+  all skip/auto transitions, and a full playthrough remain unverified.
+  Menus, profiles, and lyrics are out of
   scope. Rich-text tags such as `<pop_G>` retain native rendering.
 - The REA/Ghidra provider import failed with a sharing violation. Do not claim
   successful decompilation from that attempt; the implemented findings have
@@ -291,8 +301,9 @@ on this machine. The known English patch is backed up and disabled while the
 mod is installed. Do not reinstall or remove a working runtime merely to edit
 source documentation. Keep private test probes out of the final player package.
 
-The final local candidate is in the sibling
-`releases/v0.2.0-alpha.1-final/` directory, with its checksum in
-[the candidate record](docs/releases/v0.2.0-alpha.1-candidate.md). The final
-installation is portable-managed, enabled, and manual. The game was closed after
-verification. The public v0.2 tag/release has not been created.
+The optimized player ZIP is in the sibling
+`releases/v0.2.0-alpha.1-optimized/` directory, with the checksum above. The
+`v0.2.0-alpha.1-final` folder and candidate record describe an earlier functional
+checkpoint, not the optimized release. Private profiling ZIPs must never be
+published. The final installation is portable-managed, enabled, and manual;
+inspect live state before operating. The game is closed after verification.

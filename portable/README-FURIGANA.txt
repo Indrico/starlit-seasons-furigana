@@ -1,4 +1,4 @@
-STARLIT SEASON FURIGANA - v0.2.0-alpha.1 DEVELOPMENT CANDIDATE
+STARLIT SEASON FURIGANA - v0.2.0-alpha.1 PRERELEASE
 
 Requires THE IDOLM@STER STARLIT SEASON 1.61 / Steam build 8278842 on Windows x64.
 The UE4SS loader, prebuilt native bridge, and furigana annotations are included.
@@ -58,8 +58,9 @@ KNOWN TEST LIMITS
 Functional checks include ordinary dialogue in Story and Album at 1920x1080,
 manual/auto control, keyboard/mouse advance, and synthetic pagination. Every
 cinema/novel/DLC layout, controller input, and a full playthrough remain open.
-Stuttering profiling/optimization is deferred; no frame-time improvement is
-claimed for this functional development candidate.
+This version removes recurring global widget scans and reduces text preparation
+work. Performance depends on hardware and scene; no fixed frame rate is promised.
+See docs/performance.md in the repository for measurements and test limits.
 
 PROJECT AND SUPPORT
 https://github.com/Indrico/starlit-seasons-furigana
