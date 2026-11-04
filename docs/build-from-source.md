@@ -3,21 +3,26 @@
 Most players should use the [drag-and-drop package](usage.md). This optional
 workflow builds a private reading table and uses the Python installer.
 
+These instructions target current `main` (v0.2 development), not the historical
+alpha.2 source tag. Use a checkout of `main` when following them.
+
 ## If the mod is already installed
 
 1. Launch **THE IDOLM@STER STARLIT SEASON** normally through Steam.
 2. Open a Japanese conversation or an answer-choice scene.
-3. Furigana starts enabled. Small kana appear above annotated kanji after a
-   complete matching line finishes revealing and remains stable for 250 ms.
-4. Press **F7** to turn furigana off or on. Turning it off restores native text.
+3. The native bridge prepares the complete line and furigana together at fixed
+   sizes. Dialogue waits for advance input by default; **F6** switches automatic
+   progression on or off.
+4. Press **F7** for furigana only. **OPTION** has the persistent master switch
+   for every feature, also accessible with **F8** while Options is open.
 
 The local installation used to develop this release is already configured.
 Downloading the release does not require reinstalling that setup.
 
 ## What to download
 
-On the [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.2),
-download GitHub's **Source code (zip)** archive. Extract it to a
+Clone the [repository](https://github.com/Indrico/starlit-seasons-furigana),
+or download its `main` source archive. Extract it to a
 working folder outside the game's installation, then open PowerShell in the
 extracted folder containing `README.md`.
 
@@ -39,6 +44,7 @@ Do not copy the source ZIP directly into the game's `Paks` directory.
 - 64-bit Python 3.10, the Python version tested for this release.
 - Internet access to install Python dependencies and download the pinned loader.
 - A folder for private extracted assets and generated readings.
+- Installed MSVC x64 C++ tools and Windows SDK for the native bridge.
 
 The installer does not merge another UE4SS installation. If you have an existing
 managed installation, use its uninstall command before installing again. Preserve
@@ -99,12 +105,13 @@ succeeds:
 Keep `.local` private. It contains extracted game text, generated data, and the
 resource key. It is excluded from Git and is not a release upload.
 
-### 4. Install and play
+### 4. Build the native bridge, install, and play
 
 With the game still closed:
 
 ```powershell
-& '.\.venv\Scripts\python.exe' tools/install_mod.py --game "$gameRoot" --loader-zip "$privateRoot/ue4ss.zip" --readings "$privateRoot/generated/readings.lua"
+& '.\.venv\Scripts\python.exe' tools/build_native.py --output "$privateRoot/build/StarlitFuriganaNative.dll"
+& '.\.venv\Scripts\python.exe' tools/install_mod.py --game "$gameRoot" --loader-zip "$privateRoot/ue4ss.zip" --readings "$privateRoot/generated/readings.lua" --native-dll "$privateRoot/build/StarlitFuriganaNative.dll"
 ```
 
 The installer adds the mod runtime and records its ownership hashes. If the known
@@ -113,7 +120,8 @@ the PAK loading directory and disables them. Original executables, base PAKs,
 other mods, and saves are not rewritten.
 
 Launch through Steam and use Japanese text. Start a conversation to see the
-furigana. **F7** toggles annotations; no mod menu or Lua console is needed.
+furigana. See [controls and preferences](dialogue-controls.md) for F6, F7, the
+Options master switch, pagination, and timing settings.
 
 ## Remove the mod
 
@@ -134,8 +142,9 @@ an edited managed file, preserve your edits and see [installation and removal](i
 
 ## Limits and troubleshooting
 
-- **No furigana during text reveal:** this is expected. Readings appear after a
-  complete exact-source match remains stable for 250 ms.
+- **Text still reveals before furigana appears:** check `ue4ss/UE4SS.log` for a
+  missing/rejected native bridge. That fallback retains the old 250 ms gate and
+  does not implement manual dialogue.
 - **Some text remains unchanged:** menus, profiles, and lyrics are outside this
   version's scope. Unsupported markup, unmatched substituted text, and layouts
   that do not fit keep the native renderer.
@@ -146,7 +155,8 @@ an edited managed file, preserve your edits and see [installation and removal](i
 - **An existing-loader error:** the installer does not overwrite another loader
   or an existing managed installation.
 
-Dialogue, fitted two-line text, three answer labels, and F7 were observed at
-1680 by 1050. Interactive choice input in normal play, controller input, true
-1080p rendering, and a complete playthrough remain unverified. See
+Ordinary fixed-size dialogue, native page advances, F6/F7, Options controls, and
+startup skipping were sampled at 1920 by 1080. Interactive choice input in normal
+play, controller input, all conversation families, and a complete playthrough
+remain unverified. Performance optimization is deferred. See
 [runtime verification](runtime.md) for the recorded results.

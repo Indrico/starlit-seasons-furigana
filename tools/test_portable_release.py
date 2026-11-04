@@ -33,10 +33,12 @@ class PortableReleaseTests(unittest.TestCase):
             {'base': '学校', 'reading': 'がっこう'}, {'base': 'へ'},
             {'base': '行', 'reading': 'い'}, {'base': 'く'}]}], ensure_ascii=False), encoding='utf-8')
         self.shipping = b'synthetic original Shipping executable'
+        self.native = self.base / 'native.dll'
+        self.native.write_bytes(b'synthetic precompiled dialogue bridge')
         self.package = self.base / 'portable.zip'
         with patch.object(install_mod, 'EXPECTED_LOADER_SHA256', hashlib.sha256(self.loader.read_bytes()).hexdigest()), \
                 patch.object(install_mod, 'EXPECTED_SHIPPING_SHA256', hashlib.sha256(self.shipping).hexdigest()):
-            self.manifest = build_release.build(self.loader, self.readings, self.package)
+            self.manifest = build_release.build(self.loader, self.readings, self.package, self.native)
         with zipfile.ZipFile(self.package) as archive:
             archive.extractall(self.game)
         (self.game / 'StarlitSeason.exe').write_bytes(b'synthetic original launcher')
@@ -70,6 +72,8 @@ class PortableReleaseTests(unittest.TestCase):
             self.assertIn('Check-Furigana.cmd', names)
             self.assertIn('Uninstall-Furigana.cmd', names)
             self.assertIn(f'{install_mod.BIN_REL}/ue4ss/LICENSE', names)
+            self.assertIn(f'{install_mod.MOD_REL}/StarlitFuriganaNative.dll', names)
+            self.assertIn(f'{install_mod.MOD_REL}/MinHook.LICENSE.txt', names)
             self.assertFalse(any(name.endswith(('.exe', '.pak', '.hex', '.jsonl')) for name in names))
             readings = archive.read(f'{install_mod.MOD_REL}/readings.lua').decode('utf-8')
             self.assertNotIn('学校', readings)

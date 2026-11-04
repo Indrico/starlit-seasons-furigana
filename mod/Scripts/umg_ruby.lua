@@ -51,6 +51,7 @@ function M.attach(source, options)
         source = source, source_slot = source_slot, anchor_source = anchor_source,
         vertical_box_slot = vertical_box_slot, parent = parent, outer = source:GetOuter(),
         options = options, widgets = {}, widths = {}, heights = {}, previous_text = nil,
+        shifted_slots = {}, native_images = {},
         text_class = required('/Script/UMG.TextBlock'),
         text_library = required('/Script/Engine.Default__KismetTextLibrary'),
         original_opacity = source.RenderOpacity,
@@ -92,6 +93,7 @@ function M.attach(source, options)
         self.font_holder = holder
     end
     assert(self.font_size and self.font_size > 0, 'The source font must be resolved before attaching ruby')
+    self.font_size = options.fixed_base_size or self.font_size
     -- The fallback font holder is also used for measurement, so its live font
     -- struct can change. Preserve the base outline before measuring any ruby.
     self.base_outline = tonumber(self.font.OutlineSettings.OutlineSize) or 0
@@ -216,6 +218,142 @@ function Renderer:_source_visible()
     return true
 end
 
+function Renderer:_expanded_size(size)
+    if not self.options.expand_dialogue then return size end
+    local library = required('/Script/UMG.Default__WidgetLayoutLibrary')
+    local viewport = library:GetViewportSize(self.source)
+    local scale = library:GetViewportScale(self.source)
+    assert(scale and scale > 0 and viewport.X > 0 and viewport.Y > 0, 'Viewport is not ready')
+    local width = viewport.X / scale * 0.67
+    if valid(self.parent.Slot) and self.parent.Slot:IsA('/Script/UMG.CanvasPanelSlot') then
+        width = self.parent.Slot:GetSize().X
+    end
+    return {X = math.min(width, viewport.X / scale * 0.90), Y = viewport.Y / scale * 0.22}
+end
+
+function Renderer:_expand_plate(original, size)
+    if not self.options.expand_dialogue then return end
+    local alignment, position = self.source_slot:GetAlignment(), self.source_slot:GetPosition()
+    local extra = size.Y - original.Y
+    self.slot:SetSize(size)
+    self.slot:SetPosition({X = position.X + (alignment.X - 0.5) * (size.X - original.X),
+        Y = position.Y - (1 - alignment.Y) * extra})
+    local owner = self.options.owner
+    if valid(owner) and not self.images_saved then
+        local function visit(widget, depth)
+            if not valid(widget) or M.is_generated(widget) or depth > 8 then return end
+            if widget:IsA('/Script/UMG.BackgroundBlur') and valid(widget.Slot) and
+                widget.Slot:IsA('/Script/UMG.CanvasPanelSlot') then
+                local slot = widget.Slot
+                local anchors, alignment = slot:GetAnchors(), slot:GetAlignment()
+                local position, size = slot:GetPosition(), slot:GetSize()
+                self.native_blur = {slot = slot, auto = slot.bAutoSize,
+                    anchors = {Minimum = {X = anchors.Minimum.X, Y = anchors.Minimum.Y},
+                        Maximum = {X = anchors.Maximum.X, Y = anchors.Maximum.Y}},
+                    alignment = {X = alignment.X, Y = alignment.Y},
+                    position = {X = position.X, Y = position.Y}, size = {X = size.X, Y = size.Y}}
+            end
+            local name = widget:GetFName():ToString()
+            if name == 'Windows' then
+                -- The background contains all native window variants.
+                self.native_images[#self.native_images + 1] = {
+                    widget = widget, opacity = widget.RenderOpacity, visibility = widget.Visibility,
+                }
+                return
+            end
+            if widget:IsA('/Script/UMG.Image') then
+                local resource = widget.Brush.ResourceObject
+                local name = valid(resource) and resource:GetFullName():lower() or ''
+                if name:find('wt_message_window', 1, true) or name:find('wt_mes_cursor', 1, true) then
+                    -- Native wait/animation can show a cursor container again.
+                    -- Collapse its leaf images so its plate cannot leak below us.
+                    self.native_images[#self.native_images + 1] = {
+                        widget = widget, opacity = widget.RenderOpacity, visibility = widget.Visibility,
+                    }
+                end
+            end
+            local ok, count = pcall(function() return widget:GetChildrenCount() end)
+            if ok then for index = 0, count - 1 do visit(widget:GetChildAt(index), depth + 1) end end
+        end
+        visit(self.parent, 0)
+        local ok, cursor = pcall(function() return owner._PanelCursor end)
+        if ok and valid(cursor) then
+            self.native_images[#self.native_images + 1] = {widget = cursor, opacity = cursor.RenderOpacity}
+        end
+        self.images_saved = true
+    end
+    if not self.backgrounds then
+        self.backgrounds = {}
+        -- This texture is one half of the native window. Mirror the second
+        -- half, as the original HorizontalBox does, to keep both rounded ends.
+        local texture = LoadAsset('/Game/Widget/Commu/Textures/WT_message_window.WT_message_window')
+        assert(valid(texture), 'The original dialogue background is unavailable')
+        for index = 1, 2 do
+            local image = create(required('/Script/UMG.Image'), self.outer)
+            image:SetBrushFromTexture(texture, false)
+            image:SetVisibility(3)
+            if index == 2 then
+                image:SetRenderTransformPivot({X = 0.5, Y = 0.5})
+                image:SetRenderScale({X = -1, Y = 1})
+            end
+            local slot = self.canvas:AddChildToCanvas(image)
+            slot:SetZOrder(-10)
+            self.backgrounds[index] = {widget = image, slot = slot}
+        end
+    end
+    for index, background in ipairs(self.backgrounds) do
+        background.slot:SetPosition({X = (index - 1) * size.X / 2, Y = 0})
+        background.slot:SetSize({X = size.X / 2, Y = size.Y})
+    end
+    if self.native_blur and valid(self.native_blur.slot) then
+        -- Keep the original blur inside the resized window instead of leaving
+        -- a blurred strip at the old lower edge. Native inset is ten units.
+        local slot = self.native_blur.slot
+        local alignment, position = self.slot:GetAlignment(), self.slot:GetPosition()
+        slot:SetAnchors(self.slot:GetAnchors())
+        slot:SetAlignment(alignment)
+        slot:SetPosition({X = position.X + (1 - 2 * alignment.X) * 10,
+            Y = position.Y + (1 - 2 * alignment.Y) * 10})
+        slot:SetSize({X = size.X - 20, Y = size.Y - 20})
+        slot:SetAutoSize(false)
+    end
+    for _, image in ipairs(self.native_images) do
+        if valid(image.widget) then
+            image.widget:SetRenderOpacity(0)
+            if image.visibility then image.widget:SetVisibility(1) end -- Native cursor animations can reset opacity.
+        end
+    end
+    if valid(owner) and not self.slots_saved then
+        for _, name in ipairs({'_WidgetName', '_PanelGuide'}) do
+            local ok, widget = pcall(function() return owner[name] end)
+            if ok and valid(widget) and valid(widget.Slot) and widget.Slot:IsA('/Script/UMG.CanvasPanelSlot') then
+                local p = widget.Slot:GetPosition()
+                self.shifted_slots[#self.shifted_slots + 1] = {
+                    slot = widget.Slot, widget = widget, clipping = widget.Clipping,
+                    x = p.X, y = p.Y, name = name == '_WidgetName',
+                }
+            end
+        end
+        self.slots_saved = true
+    end
+    for _, saved in ipairs(self.shifted_slots) do
+        if valid(saved.slot) then
+            local shift_x = 0
+            if saved.name then
+                -- Both native message panels are centered. Align the header
+                -- with the expanded panel and clip its decorative curl, which
+                -- otherwise extends below the header's 62-unit bounds.
+                local parent_slot = self.parent.Slot
+                if valid(parent_slot) and parent_slot:IsA('/Script/UMG.CanvasPanelSlot') then
+                    shift_x = (parent_slot:GetSize().X - size.X) / 2
+                end
+                saved.widget:SetClipping(1)
+            end
+            saved.slot:SetPosition({X = saved.x + shift_x, Y = saved.y - extra + 32})
+        end
+    end
+end
+
 function Renderer:geometry_key()
     if not valid(self.source) or not valid(self.parent) then return nil end
     local layout = self.source_slot.LayoutData
@@ -232,6 +370,24 @@ end
 function Renderer:hide()
     if valid(self.host) then self.host:SetVisibility(1) end
     if valid(self.source) then self.source:SetRenderOpacity(self.original_opacity) end
+    local blur = self.native_blur
+    if blur and valid(blur.slot) then
+        blur.slot:SetAnchors(blur.anchors)
+        blur.slot:SetAlignment(blur.alignment)
+        blur.slot:SetPosition(blur.position)
+        blur.slot:SetSize(blur.size)
+        blur.slot:SetAutoSize(blur.auto)
+    end
+    for _, saved in ipairs(self.shifted_slots) do
+        if valid(saved.slot) then saved.slot:SetPosition({X = saved.x, Y = saved.y}) end
+        if valid(saved.widget) then saved.widget:SetClipping(saved.clipping) end
+    end
+    for _, image in ipairs(self.native_images) do
+        if valid(image.widget) then
+            image.widget:SetRenderOpacity(image.opacity)
+            if image.visibility then image.widget:SetVisibility(image.visibility) end
+        end
+    end
     self.previous_text = nil
 end
 
@@ -242,30 +398,39 @@ end
 
 function Renderer:update(segments, visible_count)
     if not valid(self.source) or not valid(self.parent) then return false, 'Source widget expired' end
-    if not self:_source_visible() then self:hide(); return false, 'Source widget or its ancestor is hidden' end
+    if not self.options.prepare_hidden and not self:_source_visible() then self:hide(); return false, 'Source widget or its ancestor is hidden' end
     local source_text = Layout.text(segments)
     if source_text:find('<[^>]+>') then
         self:hide()
         return false, 'Rich-text markup requires a style-preserving parser'
     end
-    local size = self:_size()
+    local original_size = self:_size()
+    local size = self:_expanded_size(original_size)
     if size.X <= 0 or size.Y <= 0 then
         self:hide(); return false, 'Source geometry is not ready'
     end
     self:_sync_slot()
+    self:_expand_plate(original_size, size)
     -- Hidden canvases may retain stale desired sizes. Measure while visible but
     -- fully transparent; swap to generated text only after a successful layout.
     self.host:SetVisibility(3)
     self.host:SetRenderOpacity(0)
     local margin = self.source.Margin
+    if self.options.expand_dialogue then
+        margin = {Left = 36, Right = 36, Top = 14, Bottom = 38}
+        local ok, npc = pcall(function() return self.options.owner._WidgetNPC end)
+        if ok and valid(npc) and npc:IsVisible() and npc.RenderOpacity > 0.01 then margin.Left = 340 end
+    end
+    self.active_margin = margin
+    self.active_size = size
     local width = self.options.width or math.max(1, size.X - margin.Left - margin.Right)
     local original_height = math.max(1, size.Y - margin.Top - margin.Bottom)
     local slack = math.max(0, self.options.max_vertical_slack or 0)
     local height = original_height + slack
-    local minimum = math.min(self.font_size, self.options.min_base_size or 18)
+    local minimum = self.options.fixed_size and self.font_size or math.min(self.font_size, self.options.min_base_size or 18)
     local result
     for base_size = self.font_size, minimum, -1 do
-        local ruby_size = math.max(8, math.floor(base_size * (self.options.ruby_scale or 0.48)))
+        local ruby_size = math.max(8, math.floor(base_size * (self.options.ruby_scale or (self.options.fixed_size and 0.5 or 0.48))))
         self:_measure('国', base_size, 'base')
         self:_measure('あ', ruby_size, 'ruby')
         local base_height = self.options.base_height or self.heights['base:' .. tostring(base_size)]
@@ -286,18 +451,43 @@ function Renderer:update(segments, visible_count)
             base_size, ruby_size, result.lines, result.height, height, base_height, ruby_height, width)
         if result.height <= height then break end
     end
-    if not result or result.height > height then
+    if not result or (result.height > height and not self.options.paginate) then
         self:hide(); return false, 'Ruby does not fit the source rectangle at the minimum readable font size; ' ..
             (result and result.fit_summary or 'no layout result')
     end
-    local added_height = math.max(0, math.ceil(result.height - original_height))
-    if added_height > 0 then
-        local alignment = self.source_slot:GetAlignment()
-        local position = self.source_slot:GetPosition()
-        self.slot:SetSize({X = size.X, Y = size.Y + added_height})
-        self.slot:SetPosition({X = position.X, Y = position.Y + added_height * alignment.Y})
+    for _, run in ipairs(result.runs) do
+        if run.width > width then self:hide(); return false, 'A word group exceeds the fixed layout width' end
     end
-    result.fit_summary = result.fit_summary .. string.format(' canvasH=%.2f slack=%d', size.Y + added_height, added_height)
+    if self.options.paginate then
+        local pages, reason = Layout.paginate(result, height)
+        if not pages then self:hide(); return false, reason end
+        self.pages = pages
+    else
+        result.base_text = source_text
+        self.pages = {result}
+    end
+    self.current_layout = result
+    self.original_height = original_height
+    self.source_text = source_text
+    self:show_page(1)
+    return true, result
+end
+
+function Renderer:show_page(number)
+    assert(valid(self.source) and valid(self.parent), 'Source widget expired')
+    local result = assert(self.pages[number], 'Invalid dialogue page')
+    self.page_index = number
+    local margin, original_height = self.active_margin, self.original_height
+    if not self.options.expand_dialogue then
+        local added_height = math.max(0, math.ceil(result.height - original_height))
+        if added_height > 0 then
+            local alignment = self.source_slot:GetAlignment()
+            local position = self.source_slot:GetPosition()
+            local size = self:_size()
+            self.slot:SetSize({X = size.X, Y = size.Y + added_height})
+            self.slot:SetPosition({X = position.X, Y = position.Y + added_height * alignment.Y})
+        end
+    end
     local vertical_offset = 0
     if self.vertical_box_slot then
         local alignment = tonumber(self.vertical_box_slot.VerticalAlignment)
@@ -337,11 +527,16 @@ function Renderer:update(segments, visible_count)
         self.widgets[index].base:SetVisibility(1)
         self.widgets[index].ruby:SetVisibility(1)
     end
+    if self.options.expand_dialogue then
+        if not self.page_indicator then self.page_indicator, self.indicator_slot = self:_text_widget() end
+        self:_set_text(self.page_indicator, #self.pages > 1 and string.format('%d / %d  >', number, #self.pages) or '>', 14, 'ruby')
+        self.indicator_slot:SetPosition({X = self.active_size.X - 150, Y = self.active_size.Y - 70})
+    end
     self.host:SetVisibility(3)
     self.host:SetRenderOpacity(1)
     self.source:SetRenderOpacity(0)
-    self.previous_text = source_text
-    return true, result
+    self.previous_text = self.source_text
+    return true
 end
 
 return M

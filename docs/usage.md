@@ -3,6 +3,12 @@
 The Windows package includes the UE4SS loader and prebuilt furigana annotations.
 **No Python, compilation, game-data extraction, or separate downloads are needed.**
 
+This page describes the published **v0.1.0-alpha.2** package. The current `main`
+branch also has v0.2 dialogue controls, a compact native-width window, an Options
+master switch, and logo skipping; those changes are being verified separately.
+See [development controls](dialogue-controls.md) for that version. The published
+alpha.2 asset remains unchanged.
+
 ## Fresh installation
 
 1. Download **`starlit-season-furigana-v0.1.0-alpha.2-windows-x64.zip`** from the

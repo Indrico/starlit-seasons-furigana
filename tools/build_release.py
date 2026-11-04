@@ -11,17 +11,17 @@ from readings.export_annotations import annotations, write_lua
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = 'v0.1.0-alpha.2'
+VERSION = 'v0.2.0-alpha.1'
 
 
-def build(loader_zip, readings_json, output):
+def build(loader_zip, readings_json, output, native_dll):
     database = annotations(json.loads(Path(readings_json).read_text(encoding='utf-8')))
     if not database['entries']:
         raise ValueError('The release needs prebuilt annotations')
     with tempfile.TemporaryDirectory(prefix='starlit-release-') as folder:
         reading_file = Path(folder) / 'readings.lua'
         write_lua(reading_file, database)
-        files = install_mod._inputs(Path(loader_zip), reading_file)
+        files = install_mod._inputs(Path(loader_zip), reading_file, Path(native_dll))
     with zipfile.ZipFile(loader_zip) as loader:
         license_bytes = loader.read('ue4ss/LICENSE')
     files[f'{install_mod.BIN_REL}/ue4ss/LICENSE'] = license_bytes
@@ -57,9 +57,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--loader-zip', required=True, type=Path)
     parser.add_argument('--readings-json', required=True, type=Path)
+    parser.add_argument('--native-dll', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
-    manifest = build(args.loader_zip, args.readings_json, args.output)
+    manifest = build(args.loader_zip, args.readings_json, args.output, args.native_dll)
     print(json.dumps({'release': VERSION, 'files': len(manifest['files']),
                       'annotated_texts': manifest['annotated_texts'], 'output': str(args.output)}))
 

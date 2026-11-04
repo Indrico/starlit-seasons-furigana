@@ -1,10 +1,40 @@
 # Agent guide
 
 This is the handoff and working guide for AI agents contributing to Starlit
-Season Furigana. The status below was verified on **2026-11-03**. Recheck Git,
+Season Furigana. The status below was updated on **2026-11-04**. Recheck Git,
 release metadata, and the local installation before treating that status as
 current. Keep repository documentation, release notes, and usage instructions
 in **English**.
+
+## Current development milestone
+
+`main` now contains the v0.2 functional implementation. The published player
+release is still alpha.2; the v0.2 public release remains pending performance
+work and remaining verification. Do not overwrite historical release assets.
+The user's local `plan.md` is intentionally untracked.
+
+- Default manual dialogue; F6 switches manual/automatic progression and persists
+  the preference. Native advance input consumes pages before forwarding a final
+  advance to the game. Voice playback and animation stay independent.
+- Complete text and furigana are prepared synchronously at native line events.
+  Fixed ordinary sizes are 29/14, cinema 30/15, and choices 22/11. The legacy
+  250 ms stability gate/font fitting is only a bridge-unavailable fallback.
+- The user accepted the font sizes, then requested a shorter and narrower box
+  and closer ruby. Use the native panel width (1280 inspected units), compact
+  22% viewport height, and metric gap -12. Paginate instead of shrinking.
+- OPTION contains a master On/Off button; F8 in that menu is its keyboard
+  equivalent. Off bypasses every mod feature, including native text completion,
+  manual progression, and startup skipping. Keep the menu available while off.
+- Enabled startup skips the native logo flow to Press Any Button. Preserve the
+  game's subsequent first-run/license checks and startup state transitions.
+- Writable preferences are `StarlitFurigana/user-settings.ini` under the game
+  root: `enabled`, `manual`, `auto_min_seconds`, `auto_characters_per_second`.
+  Preserve them during uninstall and keep them outside owned-file hashes.
+- **Performance profiling/optimization (plan section 4) is deferred.** Existing
+  global discovery/polling is still present. Do not claim reduced stuttering.
+
+Read [dialogue controls](docs/dialogue-controls.md), [native bridge notes](native/README.md),
+and the current section of [runtime verification](docs/runtime.md) first.
 
 ## Start here
 
@@ -31,6 +61,8 @@ in **English**.
   typewriter preservation, and the F7 toggle.
 - Added a reversible Python installer and a self-contained Windows release with
   a checker, uninstaller, pinned loader, and prebuilt annotations.
+- Added a build-locked native bridge, manual/auto state, fixed-size pagination,
+  persistent master control, compact ruby layout, and startup-logo skipping.
 - Published **[v0.1.0-alpha.2](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.1.0-alpha.2)**
   as a prerelease. It replaces the source-only installation experience of
   `v0.1.0-alpha.1`; the older release remains available historically.
@@ -65,16 +97,22 @@ The public repository is
   Published ZIP SHA-256:
   `321bdfdf86bc650bf297a0d54d977e8949134690f60d58fd9df8862318f939b1`.
 
-For a fresh installation, extract all ZIP contents next to `StarlitSeason.exe`,
+For the published alpha.2, extract all ZIP contents next to `StarlitSeason.exe`,
 run `Check-Furigana.cmd` with the game closed, then launch through Steam.
 Furigana starts enabled; **F7** toggles it. The package contains 14 owned runtime
 files plus five helper files. UE4SS's original MIT license is included.
+The v0.2 candidate packager includes 21 runtime files and five helpers,
+including a precompiled native bridge and MinHook's license.
 
 ## Repository map
 
 | Path | Responsibility |
 | --- | --- |
-| `mod/Scripts/main.lua` | Widget discovery, exact-source stability gate, renderer lifecycle, F7 |
+| `mod/Scripts/main.lua` | Native events, discovery/fallback, lifecycle, F6/F7/F8, master switch |
+| `mod/Scripts/dialogue_controller.lua` | Manual/auto state, page input and reading timers |
+| `mod/Scripts/settings.lua` | Non-executable preferences outside protected runtime files |
+| `mod/Scripts/mod_menu.lua`, `startup.lua` | Native Options control and logo-flow skipping |
+| `mod/Scripts/native_bridge.lua`, `native/bridge.cpp` | Build-locked in-memory hooks and UE4SS C-export bridge |
 | `mod/Scripts/umg_ruby.lua` | UMG measurement, fonts, slot transforms, generated widgets |
 | `mod/Scripts/ruby_layout.lua` | Pure Lua word/ruby layout, wrapping, punctuation, font fitting |
 | `mod/Scripts/reading_lookup.lua` | Release hash/span lookup and legacy private table support |
@@ -108,8 +146,17 @@ Preserve these contracts when changing the runtime:
 
 - Consider only eligible live transient conversation widgets, excluding
   templates, names, guides, and generated widgets.
-- Preserve the native typewriter renderer. Apply annotations only after an
-  exact source remains unchanged across successive 250 ms polls.
+- With the supported native bridge, complete native reveal and prepare the
+  final ruby layout in the assignment callback before returning to the game.
+  Never invoke skip/stop-voice functions to complete text. Newline/control units
+  reset native elapsed time, so one reveal call can leave a truncated source.
+- Use fixed family font sizes and paginate overflow. Preserve kana-only line
+  spacing. The bridge-unavailable fallback retains the old typewriter and
+  successive-250-ms-poll gate.
+- The original BackgroundBlur is a separate child of `message_window`. Move its
+  CanvasPanelSlot to the resized window with the native ten-unit inset, and
+  restore all original anchors/alignment/offsets on hide. Hiding only background
+  images leaves a blurred strip beneath the compact window.
 - Remove stale annotations when text changes. F7 must restore native opacity
   and detach generated canvases.
 - Unsupported markup, unmatched substitutions, invalid spans, unsupported
@@ -119,6 +166,12 @@ Preserve these contracts when changing the runtime:
   a single-text VerticalBox anchored in one.
 - Generated widgets must remain `HitTestInvisible`. Do not replace choice
   input behavior as part of a text-rendering change.
+- The Options toggle intentionally accepts input. `HitAreaWidget` must be
+  registered with a live `HitAreaChecker` before it can signal clicks. Its raw
+  checker pointer is not reflected: root exactly one process-lifetime checker
+  with `RF_MarkAsRootSet` (0x80), using GameInstance as outer. An unrooted
+  checker caused a confirmed development crash after GC. Do not use async
+  loading flags to keep it alive; they stalled startup in this build.
 
 ## Installation and private-data boundaries
 
@@ -161,8 +214,8 @@ python -m venv .venv
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 ```
 
-The release baseline is **60 passing tests**: 11 reading, 6 extraction, 11
-Python installer, 7 Windows portable, and 25 Lua lookup/layout/runtime-gate
+The current suites contain **82 tests**: 11 reading, 6 extraction, 12
+Python installer, 7 Windows portable, and 46 Lua lookup/layout/runtime/controller/menu
 tests. These use synthetic data without launching the game. Portable tests
 require Windows; Lua tests require the development dependencies.
 
@@ -190,8 +243,8 @@ and perform the relevant in-game checks before expanding compatibility claims.
   [reading pipeline](docs/reading-pipeline.md), preserving exact-source scope
   where a global override would change unrelated contexts.
 - Dialogue, fitted two-line text, three choice labels, and F7 were observed at
-  **1680 x 1050**. A 1080p attempt clamped to that display size; true 1080p
-  remains unverified.
+  **1680 x 1050** for alpha.2. The v0.2 work also runs at an actual
+  **1920 x 1080 client viewport**; check the current runtime record for its scope.
 - Album replays established choice rendering. They did not establish changed
   branches or normal-play choice input; controller input is also unverified.
 - Every cinema/novel/DLC family, long sessions, all skip/auto transitions, and
@@ -207,14 +260,16 @@ Players should continue using the published ZIP. Maintainers need private
 `readings.json` and the exact pinned loader to build a new package:
 
 ```powershell
-& '.\.venv\Scripts\python.exe' tools/build_release.py --loader-zip .local/ue4ss.zip --readings-json .local/generated/readings.json --output .local/starlit-season-furigana-NEW-VERSION-windows-x64.zip
+& '.\.venv\Scripts\python.exe' tools/build_native.py --output .local/build/StarlitFuriganaNative.dll
+& '.\.venv\Scripts\python.exe' tools/build_release.py --loader-zip .local/ue4ss.zip --readings-json .local/generated/readings.json --native-dll .local/build/StarlitFuriganaNative.dll --output .local/starlit-season-furigana-NEW-VERSION-windows-x64.zip
 ```
 
 Before using that example, set the actual new version in
 `tools/build_release.py`, the portable quick-start, and release documentation;
 replace `NEW-VERSION` in the output path. The packager refuses to overwrite an
 existing ZIP. Keep published tags/assets immutable and use a new version for
-changed runtime contents. Retain UE4SS's license.
+changed runtime contents. Retain UE4SS's and MinHook's licenses. Players must
+receive the compiled DLL; they must not need MSVC or the Windows SDK.
 
 Check package contents for private data, run the relevant suites, test the exact
 ZIP through installation/removal and in-game rendering, and publish checksums.
@@ -229,7 +284,15 @@ the checkout was `.furigana-work/project` beneath it, and a sibling
 outputs, release artifacts, and archived logs were kept outside the checkout.
 Those paths are local context, not prerequisites for a fresh clone.
 
-At the end of the release verification the game was closed, the portable alpha.2
-runtime was installed, and the known English patch was backed up and disabled.
-Recheck this before operating on that machine. Do not reinstall or remove the
-working runtime merely to edit source documentation.
+During v0.2 development, Python-managed test installations replaced the older
+portable runtime. The final functional candidate was installed through its
+portable ZIP again. Check the actual state/ownership manifests before operating
+on this machine. The known English patch is backed up and disabled while the
+mod is installed. Do not reinstall or remove a working runtime merely to edit
+source documentation. Keep private test probes out of the final player package.
+
+The final local candidate is in the sibling
+`releases/v0.2.0-alpha.1-final/` directory, with its checksum in
+[the candidate record](docs/releases/v0.2.0-alpha.1-candidate.md). The final
+installation is portable-managed, enabled, and manual. The game was closed after
+verification. The public v0.2 tag/release has not been created.

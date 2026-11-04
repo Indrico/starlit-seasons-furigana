@@ -13,6 +13,9 @@ Close Starlit Season completely before installing or uninstalling. The installer
 - The pinned [UE4SS 3.0.1-1196-g236adf26 ZIP](https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental-latest/UE4SS_v3.0.1-1196-g236adf26.zip), SHA-256 `75dc8b081d324fe0598a87b26e37d13a84d3648cbb1d08eb48c514376407a11b`. The installer reads an existing local download and does not download a loader.
 - Generated local `readings.lua`, built from your own original Japanese game text using the documented reading pipeline.
 - This repository's `mod/Scripts` and `config` source files.
+- For the current v0.2 controls, a compiled `StarlitFuriganaNative.dll`. Follow
+  the [native build instructions](dialogue-controls.md#developer-build). Omitting
+  it selects the legacy furigana renderer without manual dialogue support.
 
 The installer refuses to proceed if `dwmapi.dll`, an `ue4ss` directory, or `.starlit-furigana-state` already exists in its target location. First uninstall an earlier managed installation, or move another loader aside yourself. Existing third-party loader installations are never merged automatically.
 
@@ -21,7 +24,7 @@ The installer refuses to proceed if `dwmapi.dll`, an `ue4ss` directory, or `.sta
 From the repository root, with `--game` pointing to the installation root containing `StarlitSeason.exe`:
 
 ```powershell
-python tools/install_mod.py --game 'D:\SteamLibrary\steamapps\common\StarlitSeason' --loader-zip '.local\ue4ss-experimental.zip' --readings '.local\generated\readings.lua'
+python tools/install_mod.py --game 'D:\SteamLibrary\steamapps\common\StarlitSeason' --loader-zip '.local\ue4ss-experimental.zip' --readings '.local\generated\readings.lua' --native-dll '.local\build\StarlitFuriganaNative.dll'
 ```
 
 All inputs are read, staged, and checked before the runtime tree changes. The installer copies only `dwmapi.dll` and `ue4ss/UE4SS.dll` from the ZIP; bundled sample mods and default configurations are excluded. It adds the project settings, signatures, furigana scripts, reading table, and a `mods.txt` enabling only `StarlitFurigana`.
@@ -41,6 +44,11 @@ python tools/install_mod.py --game 'D:\SteamLibrary\steamapps\common\StarlitSeas
 Uninstallation first checks every existing managed file against its recorded hash. It refuses to continue if a file was edited, a patch backup changed, or a patch restore destination is occupied. Preserve your edits elsewhere before retrying. No files are removed before these checks pass.
 
 Only matching managed files are removed, and the original English patch files are restored to their recorded locations. Only empty directories are removed. Runtime-created logs and unrelated user files remain; consequently an `ue4ss` directory containing those files can survive uninstallation and must be moved aside before another installation.
+
+The writable `StarlitFurigana/user-settings.ini` preferences are outside the
+ownership manifest. Installation and removal preserve them. **OPTION** controls
+the persistent master switch; **F6** controls manual/automatic dialogue. See
+[controls and preferences](dialogue-controls.md).
 
 If a file-lock error interrupts removal, the installer attempts to restore the installation. Recovery data is retained if rollback cannot finish. Uninstallation does not require the game executable to retain its original build hash, allowing the mod to be removed after a game update.
 

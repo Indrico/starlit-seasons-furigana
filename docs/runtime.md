@@ -1,5 +1,82 @@
 # Runtime behavior and verification
 
+## Current v0.2 development implementation
+
+The development branch uses a build-locked native bridge for message assignment,
+completion waits, advance input, cleanup, and choices. It validates the Shipping
+EXE hash and live instruction prefixes before installing in-memory hooks. No
+executable or PAK on disk is patched. The compiled bridge completes native reveal
+batches, then calls Lua synchronously to prepare the full line and annotations.
+It avoids the game's skip/stop-voice handlers. See [native notes](../native/README.md)
+and [controls and preferences](dialogue-controls.md).
+
+Supported dialogue starts in manual mode. F6 changes and persists that mode;
+automatic progression reads each page before releasing the native completion
+wait. Fixed ordinary sizes are 29/14, cinema 30/15, and choices 22/11. Long text
+is paginated rather than reduced. Ordinary windows follow the native panel width
+(1280 inspected units), use 22% viewport height, and keep ruby close to its base.
+F7 restores native visuals independently of the progression mode.
+
+The OPTION menu contains a persistent master On/Off control, also accessible
+through F8 while that menu is open. Off bypasses native reveal, wait, advance,
+and choice modifications as well as annotations and startup skipping. Preferences
+are stored outside owned runtime files at `StarlitFurigana/user-settings.ini`.
+When enabled, startup advances the native logo flow to Press Any Button without
+replacing the game's subsequent state transitions.
+
+On 2026-11-04, the supported build was sampled in an actual 1920 by 1080 client:
+
+- Complete multiline text and ruby appeared together at fixed 29/14 sizes in
+  ordinary Album and normal Story dialogue. Native line events replace the old
+  stability delay. This was inspected visually, without frame-by-frame capture.
+- A manual Album line remained held for 58 seconds, including over 30 seconds
+  after its voice ended, while character animation continued. Enter and left
+  click advanced through the native handler. Synthetic and real overflow pages
+  consumed advance input before the next native line.
+- F6 preferences survived restart. Automatic mode advanced sampled Story and
+  Album dialogue; returning to manual held the current line. A native three-choice
+  Album display retained its separate plates with 22/11 annotations.
+- The Options master control worked through mouse input and F8, saved the
+  preference, and remained usable after more than 80 seconds. F8 outside Options
+  did not toggle the setting. The checker is rooted for process lifetime because
+  the native HitAreaWidget retains an unreflected pointer to it; an earlier
+  unrooted prototype crashed after collection and has been removed.
+- Enabled startup reached Press Any Button through the native logo-flow skip.
+  After disabling the master switch in Options and restarting, the preference
+  remained off and the native ILCA opening logo appeared again.
+- F7 restored the native background, name decoration, cursor, and blur bounds;
+  enabling it again restored the compact layout. The original blur follows the
+  new window bounds, preventing a blurred strip beneath the shorter window.
+
+Performance profiling/optimization is explicitly deferred. Discovery and polling
+still run; these changes are not evidence of improved frame times. Physical
+controller input, normal-play branching choices, all cinema/novel/DLC paths,
+long sessions, and a complete playthrough remain unverified. A successful source
+match does not establish visual correctness for every widget family.
+
+There are 82 automated tests: 46 Lua lookup/layout/runtime/controller/menu tests,
+12 Python installer tests, seven Windows portable tests, 11 reading tests, and
+six extraction tests. They use synthetic inputs. Runtime tests establish control
+flow rather than full-game compatibility, voice correctness, or crash safety.
+
+![Master switch in Options](images/mod-options.jpg)
+
+![Compact fixed-size dialogue at 1920 by 1080](images/compact-dialogue-1080p.jpg)
+
+The local [functional candidate](releases/v0.2.0-alpha.1-candidate.md) bundles
+21 runtime files and five helpers. The final renderer was checked in-game,
+including F7 restoration and a subsequent multiline native line. Its exact ZIP
+then passed clean installation and runtime hash checks. Removal restored both
+English-patch files with identical hashes and preserved user preferences; the
+final ZIP was installed again. The Shipping EXE hash stayed unchanged. No private
+inspection helpers or original game assets are included.
+
+## Published alpha.2 behavior and historical verification
+
+The remainder records the earlier published release and its 2026-11-03 tests.
+The old typewriter wait, font fitting, test totals, and 1080p limitation below
+apply to that version, not the current development implementation.
+
 The runtime uses UE4SS Lua and the game's original UMG font. It adds separate
 small kana TextBlocks above annotated words in eligible Japanese conversation
 text. It does not modify the executable or save files.

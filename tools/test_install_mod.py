@@ -65,11 +65,11 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((self.bin / "dwmapi.dll").is_file())
         self.assertFalse((self.bin / "ue4ss/Mods/UnwantedMod").exists())
         self.assertEqual((self.bin / "ue4ss/Mods/mods.txt").read_text(), "StarlitFurigana : 1\n")
-        self.assertEqual(len(manifest["installed"]), 11)
+        self.assertEqual(len(manifest["installed"]), len(installer.SCRIPT_NAMES) + 6)
         extra = self.bin / "ue4ss/user-created.log"
         extra.write_bytes(b"keep this")
         result = installer.uninstall(self.game)
-        self.assertEqual(result["removed_files"], 11)
+        self.assertEqual(result["removed_files"], len(installer.SCRIPT_NAMES) + 6)
         self.assertEqual(extra.read_bytes(), b"keep this")
         self.assertFalse((self.bin / "dwmapi.dll").exists())
         self.assertFalse((self.game / installer.STATE_NAME).exists())
@@ -185,6 +185,22 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.game / installer.STATE_NAME).exists())
         for name in installer.PATCH_NAMES:
             self.assertTrue((self.game / installer.PATCH_REL / name).is_file())
+
+    def test_native_bridge_is_owned_but_preferences_survive_removal(self):
+        native = self.base / 'native.dll'
+        native.write_bytes(b'synthetic native bridge')
+        license_file = self.source / 'native/vendor/minhook/LICENSE.txt'
+        license_file.parent.mkdir(parents=True)
+        license_file.write_bytes(b'synthetic license')
+        manifest = installer.install(self.game, self.loader, self.readings, native)
+        installed = self.game / installer.MOD_REL / 'StarlitFuriganaNative.dll'
+        self.assertEqual(installed.read_bytes(), native.read_bytes())
+        settings = self.game / 'StarlitFurigana/user-settings.ini'
+        settings.write_text('manual = false\n', encoding='utf-8')
+        self.assertFalse(any(item['path'].endswith('user-settings.ini') for item in manifest['installed']))
+        installer.uninstall(self.game)
+        self.assertFalse(installed.exists())
+        self.assertEqual(settings.read_text(), 'manual = false\n')
 
     def test_uninstall_file_lock_rolls_back_before_restoring_patch(self):
         self.add_patch()

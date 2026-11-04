@@ -24,7 +24,8 @@ BIN_REL = "StarlitSeason/Binaries/Win64"
 MOD_REL = f"{BIN_REL}/ue4ss/Mods/StarlitFurigana/Scripts"
 PATCH_REL = "StarlitSeason/Content/Paks/~mods"
 PATCH_NAMES = ("pakchunk99-EngPatch.pak", "pakchunk99-EngPatch.sig")
-SCRIPT_NAMES = ("main.lua", "umg_ruby.lua", "ruby_layout.lua", "reading_lookup.lua", "sha256.lua")
+SCRIPT_NAMES = ("main.lua", "umg_ruby.lua", "ruby_layout.lua", "reading_lookup.lua", "sha256.lua",
+                "native_bridge.lua", "dialogue_controller.lua", "settings.lua", "mod_menu.lua", "startup.lua")
 
 
 class InstallError(RuntimeError):
@@ -59,6 +60,7 @@ def _owned_path(relative: str) -> bool:
         f"{BIN_REL}/dwmapi.dll", f"{BIN_REL}/ue4ss/UE4SS.dll",
         f"{BIN_REL}/ue4ss/UE4SS-settings.ini", f"{BIN_REL}/ue4ss/Mods/mods.txt",
         *(f"{MOD_REL}/{name}" for name in (*SCRIPT_NAMES, "readings.lua")),
+        f"{MOD_REL}/StarlitFuriganaNative.dll", f"{MOD_REL}/MinHook.LICENSE.txt",
     }
     signature_prefix = f"{BIN_REL}/ue4ss/UE4SS_Signatures/"
     return relative in exact or (
@@ -91,7 +93,7 @@ def _loader_members(loader_zip: Path) -> dict[str, bytes]:
         return {f"{BIN_REL}/{name}": archive.read(name) for name in required}
 
 
-def _inputs(loader_zip: Path, readings: Path) -> dict[str, bytes]:
+def _inputs(loader_zip: Path, readings: Path, native_dll: Path | None = None) -> dict[str, bytes]:
     files = _loader_members(loader_zip)
     files[f"{BIN_REL}/ue4ss/UE4SS-settings.ini"] = (PROJECT_ROOT / "config/UE4SS-settings.ini").read_bytes()
     signatures = sorted((PROJECT_ROOT / "config/UE4SS_Signatures").glob("*.lua"))
@@ -105,6 +107,9 @@ def _inputs(loader_zip: Path, readings: Path) -> dict[str, bytes]:
     files[f"{BIN_REL}/ue4ss/Mods/mods.txt"] = b"StarlitFurigana : 1\n"
     if not files[f"{MOD_REL}/readings.lua"]:
         raise InstallError("Generated readings file is empty")
+    if native_dll is not None:
+        files[f"{MOD_REL}/StarlitFuriganaNative.dll"] = native_dll.read_bytes()
+        files[f"{MOD_REL}/MinHook.LICENSE.txt"] = (PROJECT_ROOT / "native/vendor/minhook/LICENSE.txt").read_bytes()
     return files
 
 
@@ -129,7 +134,7 @@ def _remove_empty(root: Path, directories: list[str]):
             pass
 
 
-def install(game: Path, loader_zip: Path, readings: Path) -> dict:
+def install(game: Path, loader_zip: Path, readings: Path, native_dll: Path | None = None) -> dict:
     root = _game_root(game)
     state = _inside(root, STATE_NAME)
     if state.exists() or (root / BIN_REL / "dwmapi.dll").exists() or (root / BIN_REL / "ue4ss").exists():
@@ -137,7 +142,7 @@ def install(game: Path, loader_zip: Path, readings: Path) -> dict:
     shipping = root / BIN_REL / "StarlitSeason-Win64-Shipping.exe"
     if sha256(shipping.read_bytes()) != EXPECTED_SHIPPING_SHA256:
         raise InstallError("Shipping EXE does not match the supported game build; installation refused")
-    files = _inputs(loader_zip, readings)
+    files = _inputs(loader_zip, readings, native_dll)
     backups = []
     for name in PATCH_NAMES:
         relative = f"{PATCH_REL}/{name}"
@@ -162,6 +167,8 @@ def install(game: Path, loader_zip: Path, readings: Path) -> dict:
                 raise InstallError(f"Failed to stage {relative}")
         state.mkdir()
         try:
+            if native_dll is not None:
+                _mkdirs(root, _inside(root, "StarlitFurigana"), created_dirs)
             for backup in backups:
                 stored = _inside(state, backup["stored"])
                 stored.parent.mkdir(exist_ok=True)
@@ -236,7 +243,8 @@ def uninstall(game: Path) -> dict:
         if _inside(root, backup["source"]).exists():
             raise InstallError(f"Patch restore destination is occupied: {backup['source']}")
     for relative in manifest.get("directories", []):
-        if not relative.startswith(f"{BIN_REL}/ue4ss") or not _inside(root, relative).is_relative_to(root / BIN_REL / "ue4ss"):
+        directory = _inside(root, relative)
+        if relative != "StarlitFurigana" and (not relative.startswith(f"{BIN_REL}/ue4ss") or not directory.is_relative_to(root / BIN_REL / "ue4ss")):
             raise InstallError("Invalid installed directory in manifest")
     held: list[tuple[Path, Path]] = []
     restored: list[dict] = []
@@ -291,12 +299,13 @@ def main() -> int:
     parser.add_argument("--game", required=True, type=Path)
     parser.add_argument("--loader-zip", type=Path)
     parser.add_argument("--readings", type=Path)
+    parser.add_argument("--native-dll", type=Path, help="Precompiled bridge; omit only for the legacy renderer")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
     if not args.uninstall and (args.loader_zip is None or args.readings is None):
         parser.error("installation requires --loader-zip and --readings")
     try:
-        result = uninstall(args.game) if args.uninstall else install(args.game, args.loader_zip, args.readings)
+        result = uninstall(args.game) if args.uninstall else install(args.game, args.loader_zip, args.readings, args.native_dll)
     except (InstallError, OSError, ValueError, zipfile.BadZipFile, KeyError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

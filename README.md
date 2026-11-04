@@ -4,9 +4,13 @@ Display small kana above kanji in Japanese dialogue and answer choices in **THE 
 
 For AI contributors, [AGENTS.md](AGENTS.md) records the implementation, release status, development workflow, and remaining verification work.
 
-This is a locally tested alpha for Steam build `8278842` (game 1.61, Unreal Engine 4.24). It uses UE4SS Lua and the game's original font. **F7** toggles furigana. Readings appear after a complete matching line has finished revealing and remained stable for 250 ms.
+This targets Steam build `8278842` (game 1.61, Unreal Engine 4.24), using UE4SS and the game's original font. The current development implementation adds manual dialogue, immediate complete furigana, and fixed font sizes. **F6** switches manual/automatic progression; **F7** toggles furigana. See [dialogue controls and preferences](docs/dialogue-controls.md).
 
-![Two-line Japanese dialogue with furigana](docs/images/dialogue.jpg)
+The published **v0.1.0-alpha.2** ZIP below retains its original typewriter and
+250 ms stability wait. The v0.2 implementation is being verified separately;
+stuttering optimization is deferred and no performance improvement is claimed.
+
+![Current development layout at 1920 by 1080](docs/images/compact-dialogue-1080p.jpg)
 
 ## Download and usage
 
@@ -26,7 +30,7 @@ to toggle furigana. Reinstallation is not required to use the existing setup.
 - Original Japanese dialogue was extracted locally from 163 CML DataTables: 59,361 records and 53,567 unique texts.
 - The offline pipeline generated candidate readings for 258,766 of 259,130 visible kanji characters in those unique texts, approximately 99.86%.
 - 362 records retain unresolved cases. Zero complete records have been manually reviewed; automatic coverage is not a reading-accuracy score.
-- Ordinary dialogue, two-line font fitting, and three answer choices have been observed in the game. See [runtime verification](docs/runtime.md) for the exact checks and remaining limits.
+- The v0.2 development build has been observed at 1920 by 1080 with fixed 29/14 text, compact native-width dialogue, manual/automatic progression, an Options master switch, and startup-logo skipping. Performance work remains deferred. See [runtime verification](docs/runtime.md) for evidence and limits.
 
 Git contains source code, synthetic test fixtures, and documentation. The release
 ZIP bundles UE4SS with its license and an annotation-only table of source hashes,
@@ -70,8 +74,8 @@ are intended for the optional developer workflow.
 
 1. Start the installed game normally through Steam and follow [asset extraction](docs/asset-extraction.md) to prepare a private Japanese corpus and character readings.
 2. Generate the local reading table using [the reading pipeline](docs/reading-pipeline.md).
-3. Close the game and follow [installation and removal](docs/installation.md). The installer verifies the supported game and loader hashes before changing the runtime directory.
-4. Launch through Steam. Furigana starts enabled; **F7** restores the original text or enables annotations again. Readings appear after a matching line finishes revealing and remains stable for 250 ms.
+3. Close the game, build the [native bridge](docs/dialogue-controls.md#developer-build), and supply it to the [installer](docs/installation.md). The installer verifies the supported game and loader hashes before changing the runtime directory.
+4. Launch through Steam. Dialogue starts in manual mode; **F6** toggles progression and **F7** toggles furigana. The **OPTION** menu has the persistent master switch for all mod features, also available as **F8** while Options is open.
 
 See [runtime behavior and verification](docs/runtime.md) for layout, source selection, and current limitations. Use the virtual environment's Python executable for every Python command in the linked guides.
 
@@ -90,7 +94,7 @@ The [reverse-engineering notes](docs/reverse-engineering.md) describe the eviden
 
 The tests use synthetic data and do not require or launch the game. In-game verification is recorded separately.
 
-The current validation run passed 60 tests: 11 reading, 6 extraction, 11 Python
-installer, 7 Windows package/helper, and 25 Lua lookup/layout/runtime-gate tests.
+The current validation run passed 82 tests: 11 reading, 6 extraction, 12 Python
+installer, 7 Windows package/helper, and 46 Lua lookup/layout/runtime/controller/menu tests.
 The prebuilt table was also checked against all 53,567 distinct local source
 strings, including 49,749 entries with readings.

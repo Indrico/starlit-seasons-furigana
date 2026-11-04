@@ -111,7 +111,31 @@ function M.layout(segments, options)
         run.x, run.ruby_x = run.x + offset, run.ruby_x + offset
     end
     return {runs = runs, height = y + line_height - line_gap, line_height = line_height,
-        lines = line, line_widths = line_widths}
+        line_gap = line_gap, lines = line, line_widths = line_widths}
+end
+
+function M.paginate(result, height)
+    local lines_per_page = math.floor((height + result.line_gap) / result.line_height)
+    if lines_per_page < 1 then return nil, 'One line does not fit at the fixed font size' end
+    local pages = {}
+    for number = 1, math.ceil(result.lines / lines_per_page) do
+        local first = (number - 1) * lines_per_page + 1
+        local last = math.min(result.lines, first + lines_per_page - 1)
+        local page = {runs = {}, base_text = '', lines = last - first + 1,
+            height = (last - first + 1) * result.line_height - result.line_gap}
+        for _, run in ipairs(result.runs) do
+            if run.line >= first and run.line <= last then
+                local copy = {}
+                for key, value in pairs(run) do copy[key] = value end
+                copy.y, copy.ruby_y = run.y - (first - 1) * result.line_height, run.ruby_y - (first - 1) * result.line_height
+                copy.line = run.line - first + 1
+                page.runs[#page.runs + 1] = copy
+                page.base_text = page.base_text .. copy.base
+            end
+        end
+        pages[#pages + 1] = page
+    end
+    return pages
 end
 
 return M
