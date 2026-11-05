@@ -68,6 +68,11 @@ class Annotator:
         self.phrase_pattern = re.compile("|".join(map(re.escape, alternatives))) if alternatives else None
 
     def annotate(self, source: str) -> tuple[list[dict], list[dict]]:
+        if source in self.overrides.get('exact', {}):
+            aligned = align(source, self.overrides['exact'][source])
+            if aligned is None:
+                raise ValueError('Exact-source name override cannot be aligned')
+            return aligned, []
         segments: list[dict] = []
         issues: list[dict] = []
         source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()

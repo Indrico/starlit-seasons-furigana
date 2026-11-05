@@ -13,7 +13,19 @@ intermediate pages, and the cleanup path restores renderer state.
 Communication uses the pinned UE4SS DLL's `execute_lua_in_mod` and
 `call_script_function` C exports. Calls run on the game thread. The DLL is
 loaded as a Lua C module, with no direct dependency on a Lua DLL or the C++ SDK
-ABI. A Lua callback failure releases the current progression gate.
+ABI for the dialogue callbacks. A Lua callback failure releases the current progression gate.
+
+UI geometry additionally uses the pinned loader's exported LuaMadeSimple scalar
+accessors and UObject::ProcessEvent. The opaque FGeometry return cannot be
+marshalled field-by-field by this loader. `sf_geometry` instead copies the native
+return and exposes 13 finite scalar values (size, accumulated layout/render
+transforms, and origins) on the game thread. `ui_geometry.lua` converts desktop
+positions to parent-local coordinates and rejects singular, rotated, or sheared
+transforms. This small ABI adapter is specific to the pinned loader and UE4.24;
+do not upgrade either without rechecking its constructor/storage and struct size.
+
+`sf_clock` exposes QueryPerformanceCounter seconds for cooperative UI scheduling.
+These entry points do not modify game archives or add native function hooks.
 
 `vendor/minhook` contains the x64 sources from MinHook v1.3.4, commit
 `c3fcafdc10146beb5919319d0683e44e3c30d537`, with its original license.

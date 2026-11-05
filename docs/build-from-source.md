@@ -3,7 +3,7 @@
 Most players should use the [drag-and-drop package](usage.md). This optional
 workflow builds a private reading table and uses the Python installer.
 
-These instructions target current `main` (v0.2 development), not the historical
+These instructions target current `main` (v0.3 development), not the historical
 alpha.2 source tag. Use a checkout of `main` when following them.
 
 ## If the mod is already installed
@@ -61,7 +61,7 @@ $privateRoot = Join-Path $PWD '.local'
 New-Item -ItemType Directory -Force -Path $privateRoot | Out-Null
 
 python -m venv .venv
-& '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
+& '.\.venv\Scripts\python.exe' -m pip install -r requirements-dev.txt
 
 Invoke-WebRequest -Uri 'https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental-latest/UE4SS_v3.0.1-1196-g236adf26.zip' -OutFile "$privateRoot/ue4ss.zip"
 ```
@@ -99,8 +99,16 @@ succeeds:
 & '.\.venv\Scripts\python.exe' tools/extraction/extract_original.py --game "$gameRoot" --key-file "$privateRoot/evidence/pak-key.hex" --output "$privateRoot/original"
 & '.\.venv\Scripts\python.exe' tools/extraction/corpus_extract.py --input "$privateRoot/original/StarlitSeason/Content/Commu/Localize" --output "$privateRoot/corpus"
 & '.\.venv\Scripts\python.exe' tools/extraction/localization_extract.py --content "$privateRoot/original/StarlitSeason/Content" --output "$privateRoot"
-& '.\.venv\Scripts\python.exe' tools/readings/generate.py "$privateRoot/corpus/dialogue.jsonl" --profiles "$privateRoot/character-profiles-resolved.json" --output "$privateRoot/generated"
+& '.\.venv\Scripts\python.exe' tools/extraction/texture_geometry.py --game "$gameRoot" --key-file "$privateRoot/evidence/pak-key.hex" --output "$privateRoot/ui-image-geometry.json"
+& '.\.venv\Scripts\python.exe' tools/readings/build_ui.py --dialogue "$privateRoot/corpus/dialogue.jsonl" --localization "$privateRoot/localization-ja.json" --profiles "$privateRoot/character-profiles-resolved.json" --image-geometry "$privateRoot/ui-image-geometry.json" --output "$privateRoot/ui-generated"
+& '.\.venv\Scripts\python.exe' tools/readings/export_annotations.py "$privateRoot/ui-generated/readings.json" --output "$privateRoot/ui-generated/annotations.lua"
 ```
+
+These commands combine dialogue, Japanese localization, and verified name
+aliases. Texture calibration exports hashed normalized bounds without copying
+game images to the release. See [UI annotations](ui-annotations.md). The release
+packager also requires `--ui-bindings` alongside its private readings JSON and
+compiled DLL.
 
 Keep `.local` private. It contains extracted game text, generated data, and the
 resource key. It is excluded from Git and is not a release upload.
@@ -111,7 +119,7 @@ With the game still closed:
 
 ```powershell
 & '.\.venv\Scripts\python.exe' tools/build_native.py --output "$privateRoot/build/StarlitFuriganaNative.dll"
-& '.\.venv\Scripts\python.exe' tools/install_mod.py --game "$gameRoot" --loader-zip "$privateRoot/ue4ss.zip" --readings "$privateRoot/generated/readings.lua" --native-dll "$privateRoot/build/StarlitFuriganaNative.dll"
+& '.\.venv\Scripts\python.exe' tools/install_mod.py --game "$gameRoot" --loader-zip "$privateRoot/ue4ss.zip" --readings "$privateRoot/ui-generated/annotations.lua" --native-dll "$privateRoot/build/StarlitFuriganaNative.dll" --ui-bindings "$privateRoot/ui-generated/ui-bindings.lua"
 ```
 
 The installer adds the mod runtime and records its ownership hashes. If the known
@@ -145,9 +153,9 @@ an edited managed file, preserve your edits and see [installation and removal](i
 - **Text still reveals before furigana appears:** check `ue4ss/UE4SS.log` for a
   missing/rejected native bridge. That fallback retains the old 250 ms gate and
   does not implement manual dialogue.
-- **Some text remains unchanged:** menus, profiles, and lyrics are outside this
-  version's scope. Unsupported markup, unmatched substituted text, and layouts
-  that do not fit keep the native renderer.
+- **Some text remains unchanged:** unsupported markup/table-backed rich styles,
+  unmatched substitutions, unknown names, image identities without bindings,
+  and unsupported geometry keep native rendering. Lyrics remain excluded.
 - **An incorrect reading:** readings are automatic and have not all been reviewed.
   See the [reading pipeline](reading-pipeline.md) for local corrections.
 - **An unsupported-build or loader error:** use the exact supported game and
@@ -158,5 +166,5 @@ an edited managed file, preserve your edits and see [installation and removal](i
 Ordinary fixed-size dialogue, native page advances, F6/F7, Options controls, and
 startup skipping were sampled at 1920 by 1080. Interactive choice input in normal
 play, controller input, all conversation families, and a complete playthrough
-remain unverified. Performance optimization is deferred. See
+remain unverified. See [performance evidence](performance.md) and
 [runtime verification](runtime.md) for the recorded results.

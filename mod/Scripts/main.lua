@@ -25,6 +25,8 @@ local startup = require('startup')
 local function log(message)
     print('[StarlitFurigana] ' .. message .. '\n')
 end
+local ui = require('ui_annotations').new(database, bridge, require('ui_bindings'), log)
+ui:set_enabled(master_enabled and enabled)
 
 local function is_dialogue_source(object)
     local name = object:GetFullName()
@@ -186,6 +188,10 @@ function StarlitFuriganaNativeLine(widget_address, generation, expected_text)
     controller:set_line(nil, expected_text)
     local owner = owners:find(widget_address)
     if owner then
+        if owner:IsA('/Script/imal.WidgetCommuScriptMessage') then
+            local name = owner._WidgetName
+            if name and name:IsValid() then ui:changed(name._TextName) end
+        end
         for _, field_name in ipairs({'_TextMessage', '_TextMonologue', '_TextBase'}) do
             local ok, source = pcall(function() return owner[field_name] end)
             if ok and source and source:IsValid() and source:GetText():ToString() == expected_text then
@@ -240,6 +246,7 @@ end
 
 function StarlitFuriganaSetEnabled(value)
     master_enabled, settings.enabled = value, value
+    ui:set_enabled(value and enabled)
     if not value then
         if bridge then bridge.disable() end
         StarlitFuriganaNativeClear()
@@ -296,6 +303,7 @@ end)
 bind(Key.F7, function()
     if not master_enabled then log('Enable the mod in Options before toggling furigana.'); return end
     enabled = not enabled
+    ui:set_enabled(enabled)
     for _, entry in pairs(entries) do
         entry.last_attempt_key, entry.attach_failed = nil, false
         if not enabled then
@@ -310,6 +318,11 @@ bind(Key.F7, function()
 end)
 
 bind(Key.F8, function() menu:toggle_visible() end)
+
+LoopInGameThreadWithDelay(16, function()
+    local ok, error_message = pcall(ui.tick, ui)
+    if not ok then log('UI annotations deferred: ' .. tostring(error_message)) end
+end)
 
 LoopInGameThreadWithDelay(250, function()
     local ok, error_message = pcall(tick)

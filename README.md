@@ -1,23 +1,27 @@
 # Starlit Season Furigana
 
-Display small kana above kanji in Japanese dialogue and answer choices in **THE IDOLM@STER STARLIT SEASON**.
+Display kana above kanji in Japanese dialogue, character names, menus, and backlog in **THE IDOLM@STER STARLIT SEASON**.
 
 For AI contributors, [AGENTS.md](AGENTS.md) records the implementation, release status, development workflow, and remaining verification work.
 
 This targets Steam build `8278842` (game 1.61, Unreal Engine 4.24), using UE4SS and the game's original font. The current development implementation adds manual dialogue, immediate complete furigana, and fixed font sizes. **F6** switches manual/automatic progression; **F7** toggles furigana. See [dialogue controls and preferences](docs/dialogue-controls.md).
 
-The **v0.2.0-alpha.1** prerelease includes the compiled bridge, compact dialogue,
-an Options master switch, logo skipping, and performance improvements. See the
-[measurement report](docs/performance.md) for results and their limits.
+The **v0.3.0-alpha.1** prerelease extends annotations to names, Japanese UI, and backlog while
+preserving native UI fonts and widths. Menus use smaller ruby following player
+feedback; names and log text retain larger readings. See [UI annotations](docs/ui-annotations.md)
+for the data pipeline, layout rules, and supported fallbacks. The package also
+includes manual dialogue, compact fixed dialogue fonts, an Options master switch,
+and startup-logo skipping. See [performance evidence](docs/performance.md) for
+sampled measurements and their limits.
 
 ![Current development layout at 1920 by 1080](docs/images/compact-dialogue-1080p.jpg)
 
 ## Download and usage
 
-Download [v0.2.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.2.0-alpha.1)
+Download [v0.3.0-alpha.1](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.1)
 and follow the [English usage guide](docs/usage.md).
 
-Choose **`starlit-season-furigana-v0.2.0-alpha.1-windows-x64.zip`**. Extract its
+Choose **`starlit-season-furigana-v0.3.0-alpha.1-windows-x64.zip`**. Extract its
 contents next to `StarlitSeason.exe`, run **Check-Furigana.cmd**, and launch through
 Steam. **No Python, build steps, extraction, or separate loader download are needed.**
 The package includes the pinned UE4SS loader, native DLL, and prebuilt kana annotations.
@@ -28,10 +32,11 @@ to toggle furigana. Reinstallation is not required to use the existing setup.
 
 ## Current status
 
-- Original Japanese dialogue was extracted locally from 163 CML DataTables: 59,361 records and 53,567 unique texts.
-- The offline pipeline generated candidate readings for 258,766 of 259,130 visible kanji characters in those unique texts, approximately 99.86%.
-- 362 records retain unresolved cases. Zero complete records have been manually reviewed; automatic coverage is not a reading-accuracy score.
-- The v0.2 build has been observed at 1920 by 1080 with fixed 29/14 text, compact native-width dialogue, manual/automatic progression, an Options master switch, and startup-logo skipping. See [runtime verification](docs/runtime.md) and [performance measurements](docs/performance.md) for evidence and limits.
+- Original dialogue from 163 CML tables is combined locally with Japanese localization and verified name aliases: 71,309 records and 62,508 distinct strings.
+- The package contains 56,494 annotated entries, 160 verified exact-name aliases, and 99 calibrated name-texture bindings.
+- Candidate readings cover 294,980 of 295,416 visible kanji; 467 records retain unresolved cases. Zero complete records have been manually reviewed. Coverage is not reading accuracy.
+- Sampled UI and dialogue checks use a 1920 by 1080 client. See [runtime verification](docs/runtime.md) and [performance measurements](docs/performance.md) for the tested scope and remaining limits.
+- Frame-time samples still include unexplained outliers. This alpha does not promise stutter-free play.
 
 Git contains source code, synthetic test fixtures, and documentation. The release
 ZIP bundles UE4SS with its license and an annotation-only table of source hashes,
@@ -64,7 +69,13 @@ The generator accepts a JSON array or JSONL records with `asset`, `row_id`, and 
 
 ## Runtime scope
 
-Japanese dialogue and answer choices retain their original wording, with kana above annotated kanji. Menus, profiles, and lyrics are outside this version's scope. Unsupported markup, substituted text without an exact source match, and layouts that cannot fit remain in the native renderer. Automatic readings can be wrong, especially names, counters, and context-dependent words.
+Japanese dialogue, answer choices, names, menu labels, and backlog retain their
+original wording, with kana above matched kanji. Native main UI fonts and widths
+stay intact; log cards may gain height. Lyrics, unknown names, unresolved rich
+styles/markup, unmatched substitutions, unmapped image labels, and unsupported
+geometry keep native rendering. See [UI support](docs/ui-annotations.md) for the
+sampled scope. Automatic readings can be wrong, especially counters and
+context-dependent words.
 
 The checker backs up and disables the known English patch and can restore it
 during removal. Original executables and base PAK archives remain intact. The
@@ -95,7 +106,7 @@ The [reverse-engineering notes](docs/reverse-engineering.md) describe the eviden
 
 The tests use synthetic data and do not require or launch the game. In-game verification is recorded separately.
 
-The current validation run passed 93 tests: 11 reading, 6 extraction, 12 Python
-installer, 7 Windows package/helper, and 57 Lua lookup/layout/runtime/controller/menu/performance tests.
-The prebuilt table was also checked against all 53,567 distinct local source
-strings, including 49,749 entries with readings.
+The current validation run passed 126 tests: 17 reading, 9 extraction, 12 Python
+installer, 7 Windows package/helper, and 81 Lua runtime/layout/lifecycle tests.
+The prebuilt table was also checked against all 62,508 distinct local source
+strings, including 56,494 entries with readings.

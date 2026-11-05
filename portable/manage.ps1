@@ -11,6 +11,7 @@ $allowed = @("$binRelative/dwmapi.dll", "$binRelative/ue4ss/UE4SS.dll",
     "$binRelative/ue4ss/Mods/mods.txt")
 foreach ($name in @('main.lua','umg_ruby.lua','ruby_layout.lua','reading_lookup.lua','sha256.lua','readings.lua',
     'native_bridge.lua','dialogue_controller.lua','settings.lua','mod_menu.lua','startup.lua','object_registry.lua',
+    'ui_annotations.lua','ui_geometry.lua','ui_bindings.lua','backlog.lua',
     'StarlitFuriganaNative.dll','MinHook.LICENSE.txt')) {
     $allowed += "$binRelative/ue4ss/Mods/StarlitFurigana/Scripts/$name"
 }

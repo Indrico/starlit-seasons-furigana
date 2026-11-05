@@ -1,8 +1,8 @@
 -- One initial snapshot, then construction notifications. Drain on the game thread:
 -- notification callbacks can run before reflected fields have been initialized.
 local M = {}
-function M.new(classes, accept)
-    local self = {pending = {}, entries = {}, names = {}, classes = classes}
+function M.new(classes, accept, options)
+    local self = {pending = {}, entries = {}, names = {}, classes = classes, added = {}, options = options or {}}
     if NotifyOnNewObject then
         for _, class in ipairs(classes) do
             NotifyOnNewObject(class, function(object)
@@ -19,20 +19,46 @@ function M.new(classes, accept)
                 end
             end
         end
-        local pending = self.pending
-        self.pending = {}
-        for _, object in ipairs(pending) do
+        if not self.batch then
+            self.batch, self.pending, self.batch_cursor = self.pending, {}, 1
+        end
+        -- Live construction must not wait behind a large initial snapshot.
+        -- Keep the snapshot cursor and give new notifications a bounded turn.
+        local fresh = self.options.incremental and self.batch_cursor > 1 and #self.pending > 0
+        local pending = fresh and self.pending or self.batch
+        local first = fresh and math.max(1, #pending - (self.options.admit_limit or #pending) + 1) or self.batch_cursor
+        local last = math.min(#pending, first + (self.options.admit_limit or #pending) - 1)
+        for index = first, last do
+            local object = pending[index]
             if object:IsValid() and (not accept or accept(object)) then
                 local address = object:GetAddress()
+                if self.options.incremental and self.names[address] ~= object:GetFullName() then
+                    self.added[#self.added + 1] = object
+                end
                 self.entries[address], self.names[address] = object, object:GetFullName()
             end
         end
-        for address, object in pairs(self.entries) do
+        if fresh then
+            for index = last, first, -1 do pending[index] = nil end
+        else
+            self.batch_cursor = last + 1
+            if self.batch_cursor > #pending then self.batch = nil end
+        end
+        if not self.options.incremental then for address, object in pairs(self.entries) do
             if not object:IsValid() or object:GetFullName() ~= self.names[address] then
                 self.entries[address], self.names[address] = nil, nil
             end
-        end
+        end end
         return self.entries
+    end
+    function self:take_new()
+        self:objects()
+        local added = self.added
+        self.added = {}
+        return added
+    end
+    function self:forget(address)
+        self.entries[address], self.names[address] = nil, nil
     end
     function self:find(address)
         local object = self:objects()[address]

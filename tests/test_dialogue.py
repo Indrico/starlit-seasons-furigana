@@ -124,6 +124,7 @@ function ExecuteInGameThreadWithDelay(_, callback) callback() end
 local old_find = FindAllOf
 local owner = {_TextMessage=source}
 function owner:IsValid() return true end
+function owner:IsA() return true end
 function owner:GetAddress() return 456 end
 function owner:GetFullName() return 'WidgetCommuScriptMessage /Engine/Transient.SyntheticOwner' end
 function FindAllOf(name) return name == 'WidgetCommuScriptMessage' and {owner} or old_find(name) end

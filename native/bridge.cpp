@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <string>
 #include "MinHook.h"
 
@@ -25,6 +26,14 @@ void* active_message;
 unsigned generation;
 bool manual = true, permit, hold = true, initialized, enabled = true;
 float auto_elapsed;
+using LuaConstruct = void* (*)(void*, void*);
+using LuaInteger = long long (*)(void*, int);
+using LuaNumber = void (*)(void*, double);
+LuaConstruct lua_construct;
+LuaInteger lua_integer;
+LuaNumber lua_number;
+using ProcessEvent = void (*)(void*, void*, void*);
+ProcessEvent process_event;
 
 template<class T> T& field(void* object, size_t offset) {
     return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset);
@@ -188,6 +197,10 @@ extern "C" __declspec(dllexport) int sf_initialize(void*) {
     auto loader = GetModuleHandleW(L"UE4SS.dll");
     execute_lua = reinterpret_cast<ExecuteLua>(GetProcAddress(loader, "execute_lua_in_mod"));
     call_lua = reinterpret_cast<CallLua>(GetProcAddress(loader, "call_script_function"));
+    lua_construct = reinterpret_cast<LuaConstruct>(GetProcAddress(loader, "??0Lua@LuaMadeSimple@RC@@QEAA@PEAUlua_State@@@Z"));
+    lua_integer = reinterpret_cast<LuaInteger>(GetProcAddress(loader, "?get_integer@Lua@LuaMadeSimple@RC@@QEBA_JH@Z"));
+    lua_number = reinterpret_cast<LuaNumber>(GetProcAddress(loader, "?set_number@Lua@LuaMadeSimple@RC@@QEBAXN@Z"));
+    process_event = reinterpret_cast<ProcessEvent>(GetProcAddress(loader, "?ProcessEvent@UObject@Unreal@RC@@QEAAXPEAVUFunction@23@PEAX@Z"));
     if (!execute_lua || !call_lua || !supported_game()) {
         note("Unsupported executable or loader; native hooks were not installed.");
         return 0;
@@ -221,6 +234,41 @@ extern "C" __declspec(dllexport) int sf_initialize(void*) {
     initialized = true;
     execute("StarlitFuriganaNativeReady()");
     return 0;
+}
+
+// FGeometry has no reflected members. Read its native copy rather than sending
+// it through UE4SS's field-by-field struct marshaller (which produces zeroes).
+// LuaMadeSimple's exported wrapper is constructed in bounded, aligned storage;
+// the pinned loader's constructor uses 0xa8 bytes and these calls own no refs.
+extern "C" __declspec(dllexport) int sf_geometry(void* state) {
+    if (!initialized || !lua_construct || !lua_integer || !lua_number || !process_event) return 0;
+    alignas(16) unsigned char view[0x100]{};
+    lua_construct(view, state);
+    const auto address = static_cast<uintptr_t>(lua_integer(view, 1));
+    const auto function = static_cast<uintptr_t>(lua_integer(view, 1));
+    MEMORY_BASIC_INFORMATION memory{};
+    if (!address || !VirtualQuery(reinterpret_cast<void*>(address), &memory, sizeof(memory)) ||
+        memory.State != MEM_COMMIT || (memory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) ||
+        address + 0x38 > reinterpret_cast<uintptr_t>(memory.BaseAddress) + memory.RegionSize) return 0;
+    if (!function) return 0;
+    float values[14]{};
+    process_event(reinterpret_cast<void*>(address), reinterpret_cast<void*>(function), values);
+    for (int i = 0; i < 13; ++i) {
+        if (!std::isfinite(values[i])) return 0;
+        lua_number(view, values[i]);
+    }
+    return 13;
+}
+
+extern "C" __declspec(dllexport) int sf_clock(void* state) {
+    if (!initialized || !lua_construct || !lua_number) return 0;
+    alignas(16) unsigned char view[0x100]{};
+    lua_construct(view, state);
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    lua_number(view, static_cast<double>(counter.QuadPart) / static_cast<double>(frequency.QuadPart));
+    return 1;
 }
 
 extern "C" __declspec(dllexport) int sf_manual(void*) { manual = true; auto_elapsed = 0; return 0; }

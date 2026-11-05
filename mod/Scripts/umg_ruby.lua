@@ -8,9 +8,32 @@ Renderer.__index = Renderer
 -- Weak values do not retain expired scene widgets or an ever-growing name map.
 local generated = setmetatable({}, {__mode = 'v'})
 local generated_names = setmetatable({}, {__mode = 'k'})
+local generated_sequence = 0
 
 local function valid(object)
     return object and object:IsValid()
+end
+
+-- A widget-tree root has no Panel parent. Continue through its owning
+-- UserWidget so nested reusable controls can share an outer CanvasPanel.
+function M.parent_of(widget)
+    local parent = widget:GetParent()
+    if valid(parent) then return parent end
+    local outer = widget:GetOuter()
+    for _ = 1, 4 do
+        if not valid(outer) then return nil end
+        if outer:IsA('/Script/UMG.UserWidget') then return outer end
+        outer = outer:GetOuter()
+    end
+end
+
+function M.scroll_parent(widget)
+    local parent = M.parent_of(widget)
+    for _ = 1, 48 do
+        if not valid(parent) then return nil end
+        if parent:IsA('/Script/UMG.ScrollBox') then return parent end
+        parent = M.parent_of(parent)
+    end
 end
 
 local function required(path)
@@ -20,7 +43,8 @@ local function required(path)
 end
 
 local function create(class, outer)
-    local object = StaticConstructObject(class, outer)
+    generated_sequence = generated_sequence + 1
+    local object = StaticConstructObject(class, outer, FName('StarlitFuriganaGenerated_' .. generated_sequence))
     assert(valid(object), 'Could not construct ' .. class:GetFullName())
     generated[object:GetAddress()] = object
     generated_names[object] = object:GetFullName()
@@ -29,28 +53,88 @@ end
 
 function M.is_generated(object)
     if not valid(object) then return false end
+    if object:GetFName():ToString():find('^StarlitFuriganaGenerated_') then return true end
     local made = generated[object:GetAddress()]
     return valid(made) and generated_names[made] == object:GetFullName()
+end
+
+function M.attach_image(source, geometry)
+    local parent = M.parent_of(source)
+    while valid(parent) and not parent:IsA('/Script/UMG.CanvasPanel') do parent = M.parent_of(parent) end
+    assert(valid(parent), 'Image has no CanvasPanel ancestor')
+    local outer = source:GetOuter()
+    local host = create(required('/Script/UMG.CanvasPanel'), outer)
+    local name = host:GetFullName()
+    local slot = parent:AddChildToCanvas(host)
+    slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 0, Y = 0}})
+    slot:SetAlignment({X = 0, Y = 0})
+    slot:SetAutoSize(false)
+    slot:SetZOrder(1000)
+    host:SetVisibility(3)
+    host:SetClipping(M.scroll_parent(source) and 1 or 2)
+    local label = create(required('/Script/UMG.TextBlock'), outer)
+    local font = label.Font
+    font.FontObject = LoadAsset('/Game/Widget/Font/FONT-JP.FONT-JP')
+    font.TypefaceFontName = FName('Text')
+    font.Size = 14
+    font.OutlineSettings.OutlineSize = 1
+    local outline = font.OutlineSettings.OutlineColor
+    outline.R, outline.G, outline.B, outline.A = 1, 1, 1, 0.9
+    label:SetFont(font)
+    local color = label.ColorAndOpacity
+    color.SpecifiedColor.R, color.SpecifiedColor.G, color.SpecifiedColor.B, color.SpecifiedColor.A = 0.03, 0.03, 0.03, 1
+    label:SetColorAndOpacity(color)
+    label:SetVisibility(3)
+    local text_slot = host:AddChildToCanvas(label)
+    text_slot:SetAutoSize(true)
+    local result = {source = source, parent = parent, options = {overlay_only = true}}
+    function result:hide() if valid(host) and host:GetFullName() == name then host:SetVisibility(1) end end
+    function result:detach() self:hide(); if valid(host) and host:GetFullName() == name then host:RemoveFromParent() end end
+    function result:update(binding)
+        local g = geometry(source, parent)
+        if not g then self:hide(); return false end
+        local dpi = required('/Script/UMG.Default__WidgetLayoutLibrary'):GetViewportScale(source)
+        local font_size = math.max(14, math.ceil(14 * dpi / (g.absolute_scale or 1)))
+        if self.reading ~= binding.reading or self.font_size ~= font_size then
+            local adjusted = label.Font; adjusted.Size = font_size; label:SetFont(adjusted)
+            label:SetText(required('/Script/Engine.Default__KismetTextLibrary'):Conv_StringToText(binding.reading))
+            self.reading, self.font_size = binding.reading, font_size
+            label:ForceLayoutPrepass()
+            self.measured = label:GetDesiredSize()
+        end
+        host:SetVisibility(3)
+        local measured = self.measured
+        slot:SetPosition({X = g.position.X + (g.size.X * ((binding.left or 0) + (binding.right or 1))/2 - measured.X/2) * g.scale.X,
+            Y = g.position.Y + ((binding.top or 0) * g.size.Y - measured.Y + 4 * dpi / (g.absolute_scale or 1)) * g.scale.Y})
+        slot:SetSize(measured)
+        host:SetRenderTransformPivot({X = 0, Y = 0})
+        host:SetRenderScale(g.scale)
+        text_slot:SetPosition({X = 0, Y = 0})
+        return true
+    end
+    return result
 end
 
 function M.attach(source, options)
     options = options or {}
     assert(valid(source), 'A valid source text widget is required')
     local canvas_class = required('/Script/UMG.CanvasPanel')
-    local parent = source:GetParent()
-    while valid(parent) and not parent:IsA(canvas_class) do parent = parent:GetParent() end
+    local parent = options.geometry and M.parent_of(source) or source:GetParent()
+    while valid(parent) and not parent:IsA(canvas_class) do
+        parent = options.geometry and M.parent_of(parent) or parent:GetParent()
+    end
     assert(valid(parent), 'The source text has no CanvasPanel ancestor')
     local text_slot = source.Slot
     local anchor_source = source
     local vertical_box_slot
-    if valid(text_slot) and text_slot:IsA('/Script/UMG.VerticalBoxSlot') then
+    if not options.geometry and valid(text_slot) and text_slot:IsA('/Script/UMG.VerticalBoxSlot') then
         local box = source:GetParent()
         assert(box:GetChildrenCount() == 1 and box:GetChildAt(0):GetAddress() == source:GetAddress(),
             'Only a single-text VerticalBox can host choice ruby')
         anchor_source, vertical_box_slot = box, text_slot
     end
     local source_slot = anchor_source.Slot
-    assert(valid(source_slot) and source_slot:IsA('/Script/UMG.CanvasPanelSlot'),
+    assert(options.geometry or (valid(source_slot) and source_slot:IsA('/Script/UMG.CanvasPanelSlot')),
         'The source text or its single-child VerticalBox must occupy a CanvasPanelSlot')
     local self = setmetatable({
         source = source, source_name = source:GetFullName(), source_slot = source_slot, anchor_source = anchor_source,
@@ -118,7 +202,9 @@ function M.attach(source, options)
     else
         self.canvas = self.host
     end
-    self.canvas:SetClipping(1) -- ClipToBounds; font fitting keeps visible runs inside.
+    -- A padded ruby-only host may cross a label's decorative clip rectangle.
+    -- Log rows keep their native ScrollBox clipping instead.
+    self.canvas:SetClipping(options.pad_overlay and (M.scroll_parent(source) and 1 or 2) or options.overlay_only and 0 or 1)
     self:_sync_slot()
     self.slot:SetZOrder(options.z_order or 1000)
     if self.font_holder then
@@ -148,7 +234,13 @@ function Renderer:_set_text(block, text, size, role)
     block:SetFont(self.font)
     local font = block.Font
     font.Size = size
-    font.OutlineSettings.OutlineSize = role == 'ruby' and 0 or self.base_outline
+    font.OutlineSettings.OutlineSize = role == 'ruby' and (self.options.ruby_outline or 0) or
+        self.options.overlay_only and 0 or self.base_outline
+    if role == 'ruby' and self.options.ruby_outline and self.color then
+        local color, outline = self.color.SpecifiedColor, font.OutlineSettings.OutlineColor
+        local shade = (color.R + color.G + color.B) / 3 > 0.6 and 0.03 or 1
+        outline.R, outline.G, outline.B, outline.A = shade, shade, shade, 0.9
+    end
     block:SetFont(font)
     block:SetText(self.text_library:Conv_StringToText(text))
 end
@@ -172,11 +264,13 @@ function Renderer:_measure(text, size, role)
         self.width_cursor = self.width_cursor % 2048 + 1
         self.widths[key] = size_box.X
         self.heights[font_key] = math.max(self.heights[font_key] or 0, size_box.Y)
+        if self.options and self.options.yield_work then self.options.yield_work() end
     end
     return self.widths[key]
 end
 
 function Renderer:_anchor_size()
+    if self.options.geometry then return self.options.geometry(self.source, self.parent).size end
     local size = self.source_slot:GetSize()
     if self.source_slot.bAutoSize then size = self.anchor_source:GetDesiredSize() end
     return size
@@ -193,6 +287,24 @@ function Renderer:_size()
 end
 
 function Renderer:_sync_slot()
+    if self.options.geometry then
+        local geometry = self.options.geometry(self.source, self.parent)
+        assert(geometry, 'Source geometry is not ready')
+        local key = string.format('%.2f:%.2f:%.2f:%.2f:%.4f:%.4f',geometry.position.X,geometry.position.Y,
+            geometry.size.X,geometry.size.Y,geometry.scale.X,geometry.scale.Y)
+        if self.sync_geometry_key == key then return end
+        self.sync_geometry_key = key
+        local padding = self.options.pad_overlay and 32 or 0
+        self.slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 0, Y = 0}})
+        self.slot:SetAlignment({X = 0, Y = 0})
+        self.slot:SetPosition({X = geometry.position.X - padding * geometry.scale.X,
+            Y = geometry.position.Y - padding * geometry.scale.Y})
+        self.slot:SetSize({X = geometry.size.X + padding * 2, Y = geometry.size.Y + padding})
+        self.slot:SetAutoSize(false)
+        self.host:SetRenderTransformPivot({X = 0, Y = 0})
+        self.host:SetRenderScale(geometry.scale or {X = 1, Y = 1})
+        return
+    end
     -- FGeometry is opaque and marshals as zeroes on this game's UE4SS build.
     -- A sibling CanvasPanelSlot can share the source's reflected layout exactly.
     self.slot:SetAnchors(self.source_slot:GetAnchors())
@@ -214,8 +326,12 @@ end
 
 function Renderer:_pooled(index, reading)
     if not self.widgets[index] then
-        local base, base_slot = self:_text_widget()
-        self.widgets[index] = {base = base, base_slot = base_slot}
+        if self.options and self.options.overlay_only then
+            self.widgets[index] = {}
+        else
+            local base, base_slot = self:_text_widget()
+            self.widgets[index] = {base = base, base_slot = base_slot}
+        end
     end
     local pair = self.widgets[index]
     if reading and not pair.ruby then pair.ruby, pair.ruby_slot = self:_text_widget() end
@@ -227,7 +343,7 @@ function Renderer:_source_visible()
     while valid(widget) do
         if not widget:IsVisible() then return false end
         if widget:GetAddress() == self.parent:GetAddress() then break end
-        widget = widget:GetParent()
+        widget = self.options.geometry and M.parent_of(widget) or widget:GetParent()
     end
     return true
 end
@@ -370,6 +486,14 @@ end
 
 function Renderer:geometry_key()
     if not self:_valid_source() or not valid(self.parent) then return nil end
+    if self.options.geometry then
+        local g = self.options.geometry(self.source, self.parent)
+        if not g then return nil end
+        -- Position changes need only follow the native slot, not measure again.
+        self:_sync_slot()
+        return string.format('%.1f:%.1f:%.3f:%.3f:%.3f', g.size.X, g.size.Y, g.scale.X, g.scale.Y,
+            g.absolute_scale or 1)
+    end
     local layout = self.source_slot.LayoutData
     local o, a, n, x = layout.Offsets, layout.Alignment, layout.Anchors.Minimum, layout.Anchors.Maximum
     local t = self.source.RenderTransform
@@ -454,12 +578,20 @@ function Renderer:update(segments, visible_count)
     self.active_size = size
     local width = self.options.width or math.max(1, size.X - margin.Left - margin.Right)
     local original_height = math.max(1, size.Y - margin.Top - margin.Bottom)
+    if self.options.pad_overlay then
+        self.active_margin = {Left = margin.Left + 32, Top = margin.Top + 32, Right = margin.Right, Bottom = margin.Bottom}
+    end
     local slack = math.max(0, self.options.max_vertical_slack or 0)
     local height = original_height + slack
     local minimum = self.options.fixed_size and self.font_size or math.min(self.font_size, self.options.min_base_size or 18)
+    local min_ruby = self.options.min_ruby_size or 8
+    if self.options.geometry then
+        local g = self.options.geometry(self.source, self.parent)
+        if g and g.absolute_scale and g.absolute_scale > 0 then min_ruby = math.ceil(min_ruby * scale / g.absolute_scale) end
+    end
     local result
     for base_size = self.font_size, minimum, -1 do
-        local ruby_size = math.max(8, math.floor(base_size * (self.options.ruby_scale or (self.options.fixed_size and 0.5 or 0.48))))
+        local ruby_size = math.max(min_ruby, math.floor(base_size * (self.options.ruby_scale or (self.options.fixed_size and 0.5 or 0.48))))
         self:_measure('国', base_size, 'base')
         self:_measure('あ', ruby_size, 'ruby')
         local base_height = self.options.base_height or self.heights['base:' .. tostring(base_size)]
@@ -475,17 +607,20 @@ function Renderer:update(segments, visible_count)
             gap = self.options.gap,
             line_gap = self.options.line_gap,
             justification = tonumber(self.source.Justification),
+            overlay_only = self.options.overlay_only,
+            native_line_height = base_height * (tonumber(self.source.LineHeightPercentage) or 1),
+            no_wrap = self.options.overlay_only and not self.source.AutoWrapText and (tonumber(self.source.WrapTextAt) or 0) <= 0,
         })
         result.fit_summary = string.format('base=%d ruby=%d lines=%d height=%.2f/%.2f baseH=%.2f rubyH=%.2f width=%.2f',
             base_size, ruby_size, result.lines, result.height, height, base_height, ruby_height, width)
         if result.height <= height then break end
     end
-    if not result or (result.height > height and not self.options.paginate) then
+    if not result or (result.height > height and not self.options.paginate and not self.options.overlay_only and not self.options.grow) then
         self:hide(); return false, 'Ruby does not fit the source rectangle at the minimum readable font size; ' ..
             (result and result.fit_summary or 'no layout result')
     end
     for _, run in ipairs(result.runs) do
-        if run.width > width then self:hide(); return false, 'A word group exceeds the fixed layout width' end
+        if run.width > width and not self.options.overlay_only then self:hide(); return false, 'A word group exceeds the fixed layout width' end
     end
     if self.options.paginate then
         local pages, reason = Layout.paginate(result, height)
@@ -498,6 +633,7 @@ function Renderer:update(segments, visible_count)
     self.current_layout = result
     self.original_height = original_height
     self.source_text = source_text
+    if self.options.grow then self.options.grow(result.height + margin.Top + margin.Bottom) end
     self:show_page(1)
     return true, result
 end
@@ -507,7 +643,7 @@ function Renderer:show_page(number)
     local result = assert(self.pages[number], 'Invalid dialogue page')
     self.page_index = number
     local margin, original_height = self.active_margin, self.original_height
-    if not self.options.expand_dialogue then
+    if not self.options.expand_dialogue and not self.options.geometry and not self.options.overlay_only then
         local added_height = math.max(0, math.ceil(result.height - original_height))
         if added_height > 0 then
             local alignment = self.source_slot:GetAlignment()
@@ -525,36 +661,54 @@ function Renderer:show_page(number)
     end
     for index, run in ipairs(result.runs) do
         local pair = self:_pooled(index, run.reading)
+        local changed = false
         local base_size = run.base_size
         local ruby_size_scaled = run.ruby_size
-        if pair.base_text ~= run.base or pair.base_size ~= base_size then
+        if pair.base and (pair.base_text ~= run.base or pair.base_size ~= base_size) then
             self:_set_text(pair.base, run.base, base_size, 'base')
             pair.base_text, pair.base_size = run.base, base_size
+            changed = true
         end
         local base_x, base_y = margin.Left + run.x, margin.Top + vertical_offset + run.y
-        if pair.base_x ~= base_x or pair.base_y ~= base_y then
+        if pair.base_slot and (pair.base_x ~= base_x or pair.base_y ~= base_y) then
             pair.base_slot:SetPosition({X = base_x, Y = base_y})
             pair.base_x, pair.base_y = base_x, base_y
+            changed = true
         end
-        pair.base:SetVisibility(3)
+        local base_visible = not self.options.overlay_only
+        if pair.base and pair.base_visible ~= base_visible then
+            pair.base:SetVisibility(base_visible and 3 or 1)
+            pair.base_visible, changed = base_visible, true
+        end
         if run.reading then
             if pair.ruby_text ~= run.reading or pair.ruby_size ~= ruby_size_scaled then
                 self:_set_text(pair.ruby, run.reading, ruby_size_scaled, 'ruby')
                 pair.ruby_text, pair.ruby_size = run.reading, ruby_size_scaled
+                changed = true
             end
             local ruby_x, ruby_y = margin.Left + run.ruby_x, margin.Top + vertical_offset + run.ruby_y
             if pair.ruby_x ~= ruby_x or pair.ruby_y ~= ruby_y then
                 pair.ruby_slot:SetPosition({X = ruby_x, Y = ruby_y})
                 pair.ruby_x, pair.ruby_y = ruby_x, ruby_y
+                changed = true
             end
-            pair.ruby:SetVisibility(3)
-        elseif pair.ruby then
+            if pair.ruby_visible ~= true then
+                pair.ruby:SetVisibility(3)
+                pair.ruby_visible, changed = true, true
+            end
+        elseif pair.ruby and pair.ruby_visible ~= false then
             pair.ruby:SetVisibility(1)
+            pair.ruby_visible, changed = false, true
         end
+        -- Checkpoint only after storing completed work. Retrying cached runs
+        -- must not spend the budget repeating native visibility setters, or a
+        -- long row can yield forever without reaching its remaining runs.
+        if changed and self.options.yield_work then self.options.yield_work() end
     end
     for index = #result.runs + 1, #self.widgets do
-        self.widgets[index].base:SetVisibility(1)
-        if self.widgets[index].ruby then self.widgets[index].ruby:SetVisibility(1) end
+        local pair = self.widgets[index]
+        if pair.base then pair.base:SetVisibility(1); pair.base_visible = false end
+        if pair.ruby then pair.ruby:SetVisibility(1); pair.ruby_visible = false end
     end
     if self.options.expand_dialogue then
         if not self.page_indicator then self.page_indicator, self.indicator_slot = self:_text_widget() end
@@ -563,7 +717,7 @@ function Renderer:show_page(number)
     end
     self.host:SetVisibility(3)
     self.host:SetRenderOpacity(1)
-    self.source:SetRenderOpacity(0)
+    if not self.options.overlay_only then self.source:SetRenderOpacity(0) end
     self.previous_text = self.source_text
     return true
 end

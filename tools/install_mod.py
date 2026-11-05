@@ -26,7 +26,7 @@ PATCH_REL = "StarlitSeason/Content/Paks/~mods"
 PATCH_NAMES = ("pakchunk99-EngPatch.pak", "pakchunk99-EngPatch.sig")
 SCRIPT_NAMES = ("main.lua", "umg_ruby.lua", "ruby_layout.lua", "reading_lookup.lua", "sha256.lua",
                 "native_bridge.lua", "dialogue_controller.lua", "settings.lua", "mod_menu.lua", "startup.lua",
-                "object_registry.lua")
+                "object_registry.lua", "ui_annotations.lua", "ui_geometry.lua", "ui_bindings.lua", "backlog.lua")
 
 
 class InstallError(RuntimeError):
@@ -94,7 +94,7 @@ def _loader_members(loader_zip: Path) -> dict[str, bytes]:
         return {f"{BIN_REL}/{name}": archive.read(name) for name in required}
 
 
-def _inputs(loader_zip: Path, readings: Path, native_dll: Path | None = None) -> dict[str, bytes]:
+def _inputs(loader_zip: Path, readings: Path, native_dll: Path | None = None, ui_bindings: Path | None = None) -> dict[str, bytes]:
     files = _loader_members(loader_zip)
     files[f"{BIN_REL}/ue4ss/UE4SS-settings.ini"] = (PROJECT_ROOT / "config/UE4SS-settings.ini").read_bytes()
     signatures = sorted((PROJECT_ROOT / "config/UE4SS_Signatures").glob("*.lua"))
@@ -105,6 +105,8 @@ def _inputs(loader_zip: Path, readings: Path, native_dll: Path | None = None) ->
     for name in SCRIPT_NAMES:
         files[f"{MOD_REL}/{name}"] = (PROJECT_ROOT / "mod/Scripts" / name).read_bytes()
     files[f"{MOD_REL}/readings.lua"] = readings.read_bytes()
+    if ui_bindings is not None:
+        files[f"{MOD_REL}/ui_bindings.lua"] = ui_bindings.read_bytes()
     files[f"{BIN_REL}/ue4ss/Mods/mods.txt"] = b"StarlitFurigana : 1\n"
     if not files[f"{MOD_REL}/readings.lua"]:
         raise InstallError("Generated readings file is empty")
@@ -135,7 +137,7 @@ def _remove_empty(root: Path, directories: list[str]):
             pass
 
 
-def install(game: Path, loader_zip: Path, readings: Path, native_dll: Path | None = None) -> dict:
+def install(game: Path, loader_zip: Path, readings: Path, native_dll: Path | None = None, ui_bindings: Path | None = None) -> dict:
     root = _game_root(game)
     state = _inside(root, STATE_NAME)
     if state.exists() or (root / BIN_REL / "dwmapi.dll").exists() or (root / BIN_REL / "ue4ss").exists():
@@ -143,7 +145,7 @@ def install(game: Path, loader_zip: Path, readings: Path, native_dll: Path | Non
     shipping = root / BIN_REL / "StarlitSeason-Win64-Shipping.exe"
     if sha256(shipping.read_bytes()) != EXPECTED_SHIPPING_SHA256:
         raise InstallError("Shipping EXE does not match the supported game build; installation refused")
-    files = _inputs(loader_zip, readings, native_dll)
+    files = _inputs(loader_zip, readings, native_dll, ui_bindings)
     backups = []
     for name in PATCH_NAMES:
         relative = f"{PATCH_REL}/{name}"
@@ -301,12 +303,13 @@ def main() -> int:
     parser.add_argument("--loader-zip", type=Path)
     parser.add_argument("--readings", type=Path)
     parser.add_argument("--native-dll", type=Path, help="Precompiled bridge; omit only for the legacy renderer")
+    parser.add_argument("--ui-bindings", type=Path, help="Generated hash-only UI/name bindings")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
     if not args.uninstall and (args.loader_zip is None or args.readings is None):
         parser.error("installation requires --loader-zip and --readings")
     try:
-        result = uninstall(args.game) if args.uninstall else install(args.game, args.loader_zip, args.readings, args.native_dll)
+        result = uninstall(args.game) if args.uninstall else install(args.game, args.loader_zip, args.readings, args.native_dll, args.ui_bindings)
     except (InstallError, OSError, ValueError, zipfile.BadZipFile, KeyError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

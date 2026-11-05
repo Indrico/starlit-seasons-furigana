@@ -28,6 +28,28 @@ class LayoutTests(unittest.TestCase):
         self.assertLess(run['ruby_y'], run['y'])
         self.assertEqual(run['x'] + run['base_width'] / 2, run['ruby_x'] + run['ruby_width'] / 2)
 
+    def test_overlay_does_not_widen_or_rewrap_native_text_for_long_readings(self):
+        segments = self.lua.table_from([self.lua.table_from({'base': 'AB', 'reading': 'abcdefgh'}),
+                                        self.lua.table_from({'base': 'C'})])
+        result = self.layout.layout(segments, self.lua.table_from({
+            'width': 60, 'measure': self.measure, 'base_size': 20, 'ruby_size': 14,
+            'overlay_only': True, 'no_wrap': True, 'gap': -12}))
+        self.assertEqual(result.lines, 1)
+        self.assertEqual(result.runs[2].x, 40)
+        self.assertEqual(result.runs[1].y, 0)
+        self.assertEqual(result.runs[1].ruby_size, 14)
+
+    def test_adjacent_overlay_readings_share_a_lane_without_moving_native_glyphs(self):
+        segments = self.lua.table_from([self.lua.table_from({'base': 'AB', 'reading': 'abcd'}),
+                                        self.lua.table_from({'base': 'CD', 'reading': 'efgh'})])
+        result = self.layout.layout(segments, self.lua.table_from({
+            'width': 80, 'measure': self.measure, 'base_size': 20, 'ruby_size': 14,
+            'overlay_only': True, 'no_wrap': True}))
+        self.assertEqual(len(result.runs), 1)
+        self.assertEqual(result.runs[1].base, 'ABCD')
+        self.assertEqual(result.runs[1].reading, 'abcdefgh')
+        self.assertEqual(result.runs[1].x, 0)
+
     def test_reveal_never_shows_unrevealed_reading(self):
         result = self.run_layout([{'base': '学校', 'reading': 'がっこう'}], visible=1)
         self.assertEqual(result['runs'][1]['base'], '学')

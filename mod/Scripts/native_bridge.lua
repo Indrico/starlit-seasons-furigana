@@ -2,7 +2,7 @@
 local M = {}
 function M.load(directory)
     local result = {}
-    for _, name in ipairs({'initialize', 'manual', 'auto', 'hold', 'release', 'enable', 'disable'}) do
+    for _, name in ipairs({'initialize', 'manual', 'auto', 'hold', 'release', 'enable', 'disable', 'geometry', 'clock'}) do
         local fn, message = package.loadlib(directory .. 'StarlitFuriganaNative.dll', 'sf_' .. name)
         if not fn then return nil, message end
         result[name] = fn

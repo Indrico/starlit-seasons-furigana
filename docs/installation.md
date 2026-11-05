@@ -13,9 +13,11 @@ Close Starlit Season completely before installing or uninstalling. The installer
 - The pinned [UE4SS 3.0.1-1196-g236adf26 ZIP](https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental-latest/UE4SS_v3.0.1-1196-g236adf26.zip), SHA-256 `75dc8b081d324fe0598a87b26e37d13a84d3648cbb1d08eb48c514376407a11b`. The installer reads an existing local download and does not download a loader.
 - Generated local `readings.lua`, built from your own original Japanese game text using the documented reading pipeline.
 - This repository's `mod/Scripts` and `config` source files.
-- For the current v0.2 controls, a compiled `StarlitFuriganaNative.dll`. Follow
+- For the current controls and UI geometry, a compiled `StarlitFuriganaNative.dll`. Follow
   the [native build instructions](dialogue-controls.md#developer-build). Omitting
   it selects the legacy furigana renderer without manual dialogue support.
+- For names and menus, generated `ui-bindings.lua` and the combined reading
+  table from [the UI pipeline](ui-annotations.md).
 
 The installer refuses to proceed if `dwmapi.dll`, an `ue4ss` directory, or `.starlit-furigana-state` already exists in its target location. First uninstall an earlier managed installation, or move another loader aside yourself. Existing third-party loader installations are never merged automatically.
 
@@ -24,7 +26,7 @@ The installer refuses to proceed if `dwmapi.dll`, an `ue4ss` directory, or `.sta
 From the repository root, with `--game` pointing to the installation root containing `StarlitSeason.exe`:
 
 ```powershell
-python tools/install_mod.py --game 'D:\SteamLibrary\steamapps\common\StarlitSeason' --loader-zip '.local\ue4ss-experimental.zip' --readings '.local\generated\readings.lua' --native-dll '.local\build\StarlitFuriganaNative.dll'
+python tools/install_mod.py --game 'D:\SteamLibrary\steamapps\common\StarlitSeason' --loader-zip '.local\ue4ss-experimental.zip' --readings '.local\ui-generated\annotations.lua' --native-dll '.local\build\StarlitFuriganaNative.dll' --ui-bindings '.local\ui-generated\ui-bindings.lua'
 ```
 
 All inputs are read, staged, and checked before the runtime tree changes. The installer copies only `dwmapi.dll` and `ue4ss/UE4SS.dll` from the ZIP; bundled sample mods and default configurations are excluded. It adds the project settings, signatures, furigana scripts, reading table, and a `mods.txt` enabling only `StarlitFurigana`.

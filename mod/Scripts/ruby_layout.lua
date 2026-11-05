@@ -48,16 +48,40 @@ function M.layout(segments, options)
     local line_gap = options.line_gap or 3
     local base_height = options.base_height or base_size * 1.3
     local ruby_height = options.ruby_height or ruby_size * 1.3
-    local line_height = base_height + ruby_height + gap + line_gap
+    local line_height = options.overlay_only and (options.native_line_height or base_height) or
+        base_height + ruby_height + gap + line_gap
     local visible = options.visible_count or math.huge
+    if options.overlay_only then
+        -- Adjacent annotated compounds share a reading lane. Their native
+        -- glyph advances stay unchanged; separate centered labels could
+        -- otherwise collide on small menu captions.
+        local combined = {}
+        for _, segment in ipairs(segments) do
+            local previous = combined[#combined]
+            if segment.reading and previous and previous.reading then
+                previous.base = previous.base .. segment.base
+                previous.reading = previous.reading .. segment.reading
+            else
+                combined[#combined+1] = {base=segment.base,reading=segment.reading}
+            end
+        end
+        segments = combined
+    end
     local items = units(segments)
+    local prefix, prefix_width = '', 0
     for _, item in ipairs(items) do
         if item.base == '\r' or item.base == '\n' then
             item.base_width, item.ruby_width, item.width = 0, 0, 0
+            prefix, prefix_width = '', 0
         else
             item.base_width = options.measure(item.base, base_size, 'base')
+            if options.overlay_only then
+                prefix = prefix .. item.base
+                local next_width = options.measure(prefix, base_size, 'base')
+                item.base_width, prefix_width = next_width - prefix_width, next_width
+            end
             item.ruby_width = item.reading and options.measure(item.reading, ruby_size, 'ruby') or 0
-            item.width = math.max(item.base_width, item.ruby_width)
+            item.width = options.overlay_only and item.base_width or math.max(item.base_width, item.ruby_width)
         end
     end
     local runs, x, y, line, skip_lf = {}, 0, 0, 1, false
@@ -76,7 +100,7 @@ function M.layout(segments, options)
             local next_item = items[index + 1]
             local needed = item.width
             if opening[cp] and next_item then needed = needed + next_item.width end
-            if x > 0 and x + needed > options.width and not closing[cp] then newline() end
+            if not options.no_wrap and x > 0 and x + needed > options.width and not closing[cp] then newline() end
             local remaining = math.max(0, visible - item.start)
             local length = utf8.len(item.base)
             if remaining > 0 then
@@ -89,9 +113,9 @@ function M.layout(segments, options)
                     base = base,
                     reading = remaining >= length and item.reading or nil,
                     x = x + (item.width - item.base_width) / 2,
-                    y = y + ruby_height + gap,
+                    y = options.overlay_only and y or y + ruby_height + gap,
                     ruby_x = x + (item.width - item.ruby_width) / 2,
-                    ruby_y = y,
+                    ruby_y = options.overlay_only and y - ruby_height - gap or y,
                     base_width = item.base_width,
                     ruby_width = item.ruby_width,
                     width = item.width,

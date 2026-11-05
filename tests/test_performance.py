@@ -32,6 +32,16 @@ class RegistryTests(unittest.TestCase):
         self.lua.execute('for i=1,1000 do registry:objects() end')
         self.assertEqual(self.state.scans, 1)
 
+    def test_live_notification_precedes_unfinished_initial_snapshot(self):
+        self.lua.execute('''
+            function FindAllOf() scans=scans+1;return {object(1),object(2),object(3),object(4)} end
+            registry=require('object_registry').new({'/Script/UMG.TextBlock'},nil,{incremental=true,admit_limit=1})
+            registry:take_new()
+            later=object(99);callbacks['/Script/UMG.TextBlock'](later)
+            assert(registry:take_new()[1]==later)
+            assert(registry:take_new()[1]:GetAddress()==2)
+        ''')
+
     def test_new_objects_after_initial_scan_are_found_without_rescanning(self):
         self.lua.execute('''
             registry:objects()
@@ -106,6 +116,51 @@ class NativePerformanceTests(unittest.TestCase):
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_interrupted_long_page_finishes_without_repeating_completed_native_runs(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
+        lua.execute('''
+            local ruby=require('umg_ruby')
+            local renderer
+            for i=1,100 do
+                local name,value=debug.getupvalue(ruby.attach,i)
+                if name=='Renderer' then renderer=value end
+            end
+            local runs={}
+            for i=1,40 do runs[i]={base=tostring(i),base_size=26,ruby_size=14,x=i,y=0} end
+            local writes=0
+            local r=setmetatable({widgets={},options={geometry=true,yield_work=function()error('defer')end},
+                pages={{runs=runs}},active_margin={Left=0,Top=0},source_text='complete',
+                _valid_source=function()return true end,
+                parent={IsValid=function()return true end},
+                host={SetVisibility=function()end,SetRenderOpacity=function()end},
+                source={SetRenderOpacity=function()end},
+                _set_text=function()writes=writes+1 end,
+                _text_widget=function()return {SetVisibility=function()end},{SetPosition=function()end} end},renderer)
+            local complete=false
+            for attempt=1,41 do complete=pcall(r.show_page,r,1);if complete then break end end
+            assert(complete and r.previous_text=='complete' and writes==40)
+        ''')
+
+    def test_ancestor_scale_animation_invalidates_ruby_font_compensation(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
+        lua.execute('''
+            local ruby=require('umg_ruby')
+            local renderer
+            for i=1,100 do
+                local name,value=debug.getupvalue(ruby.attach,i)
+                if name=='Renderer' then renderer=value end
+            end
+            local g={size={X=100,Y=40},scale={X=1,Y=1},absolute_scale=0.3}
+            local r=setmetatable({options={geometry=function()return g end},
+                parent={IsValid=function()return true end},_valid_source=function()return true end,
+                _sync_slot=function()end},renderer)
+            local animated=r:geometry_key()
+            g.absolute_scale=1
+            assert(animated~=r:geometry_key())
+        ''')
+
     def test_native_widgets_reusing_generated_addresses_are_not_excluded(self):
         lua = LuaRuntime(unpack_returned_tuples=True)
         lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
@@ -122,10 +177,13 @@ class MeasurementTests(unittest.TestCase):
                     GetAddress=function() return 1 end, GetFullName=function(self) return self.name end}
             end
             local made=object('Generated')
+            function FName(name) return name end
+            function made:GetFName() return {ToString=function() return self.name end} end
             function StaticConstructObject() return made end
             create({GetFullName=function() return 'SyntheticClass' end},nil)
             assert(ruby.is_generated(made))
             local native=object('Native')
+            function native:GetFName() return {ToString=function() return self.name end} end
             assert(not ruby.is_generated(native))
             made.name='Native' -- An old wrapper can now refer to reused memory.
             assert(not ruby.is_generated(native))

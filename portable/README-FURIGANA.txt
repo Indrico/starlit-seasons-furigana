@@ -1,4 +1,4 @@
-STARLIT SEASON FURIGANA - v0.2.0-alpha.1 PRERELEASE
+STARLIT SEASON FURIGANA - v0.3.0-alpha.1 PRERELEASE
 
 Requires THE IDOLM@STER STARLIT SEASON 1.61 / Steam build 8278842 on Windows x64.
 The UE4SS loader, prebuilt native bridge, and furigana annotations are included.
@@ -27,7 +27,13 @@ master switch is on. Turning it off restores native behavior; startup changes
 apply on the next launch.
 
 Automatic readings may contain errors.
-Menus, character profiles, and lyrics are outside this version's scope.
+This version adds character-name, Japanese menu, and dialogue-backlog readings.
+Main UI fonts and widths stay native. Menus use smaller ruby; names and backlog
+keep larger readings. Log cards can gain height to fit ruby without shrinking.
+F7 and the master switch restore native UI layout.
+Unknown names, missing exact-source readings, unresolved rich styles/markup,
+unsupported geometry, and unmapped image labels keep native rendering.
+Lyrics are excluded. Not every menu/DLC panel has been visually verified.
 
 PREFERENCES
 StarlitFurigana/user-settings.ini stores enabled, manual, auto_min_seconds,

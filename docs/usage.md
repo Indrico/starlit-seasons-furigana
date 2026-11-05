@@ -1,17 +1,18 @@
-# Drag-and-drop installation — v0.2.0-alpha.1
+# Drag-and-drop installation — v0.3.0-alpha.1
 
 The Windows package includes the UE4SS loader, compiled native bridge, and prebuilt furigana annotations.
 **No Python, compilation, game-data extraction, or separate downloads are needed.**
 
-This version adds manual dialogue, complete text and furigana together, fixed
-fonts in a compact window, an Options master switch, startup-logo skipping, and
-reduced recurring discovery overhead. See [controls](dialogue-controls.md) and
-[performance measurements](performance.md). The historical alpha.2 asset is unchanged.
+This version adds readings for character names, Japanese menus, and dialogue
+backlog. Native UI fonts and widths stay intact; log rows may gain height. Menu
+readings are smaller than name/log readings. Existing manual dialogue, compact
+fixed fonts, the Options master switch, and startup-logo skipping are included.
+See [UI support and limits](ui-annotations.md) and [controls](dialogue-controls.md).
 
 ## Fresh installation
 
-1. Download **`starlit-season-furigana-v0.2.0-alpha.1-windows-x64.zip`** from the
-   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.2.0-alpha.1).
+1. Download **`starlit-season-furigana-v0.3.0-alpha.1-windows-x64.zip`** from the
+   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.1).
    Choose this asset rather than GitHub's automatic **Source code** archives.
 2. Close the game. In Steam, open **Properties → Installed Files → Browse**.
 3. Extract **all contents** of the ZIP into that game folder, next to
@@ -93,15 +94,17 @@ preferences when upgrading or reinstalling.
 
 ## Package contents and limits
 
-Prebuilt annotations cover **49,749 distinct source strings with readings**.
+Prebuilt annotations cover **56,494 distinct source strings with readings**.
 They store source hashes, byte positions, and kana only. The base text comes
 from the running game; the package excludes original dialogue, game archives,
 fonts, saves, and resource keys. UE4SS is bundled with its original MIT license
 at `StarlitSeason/Binaries/Win64/ue4ss/LICENSE`. The compiled native bridge
 includes MinHook's license in its Scripts directory.
 
-Readings are automatic and may be wrong. Menus, profiles, and lyrics are outside
-this version's scope; unsupported text/layouts keep native rendering. Normal-play
+Readings are automatic and may be wrong. Unknown names, unmatched substitutions,
+unresolved rich styles/markup, unsupported geometry, and image labels without
+bindings keep native rendering. Lyrics remain excluded. Not every Japanese menu
+or DLC panel has been visually verified. Normal-play
 choice input, controller input, every cinema/novel/DLC layout, and a full playthrough
 remain unverified. See [runtime verification](runtime.md).
 

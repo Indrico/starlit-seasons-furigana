@@ -1,6 +1,67 @@
 # Runtime behavior and verification
 
-## Current v0.2 development implementation
+## v0.3 names, menus, and backlog
+
+Version 0.3 keeps the native dialogue bridge and adds an independent lifecycle
+for Japanese UI. Native menu/name glyphs remain visible with ruby-only overlays;
+the base font, width, alignment, and input remain native. Menu ruby is smaller
+than name/log ruby. Supported backlog bodies use the native 26-unit body font
+with 14-unit minimum readings and taller selected/unselected cards. See
+[UI implementation and fallbacks](ui-annotations.md).
+
+Local checks on 2026-11-05/06 used the supported game and a 1920 x 1080 client:
+
+- Main-menu help text and button guides, Album replay titles, full character
+  names, and dialogue speaker names received readings without reducing their
+  native main font. The final menu pass uses smaller readings in response to
+  the player's screenshot; compact captions scale their minimum proportionally.
+- Options System scrolling was checked in the final package. Ruby intersects the
+  ScrollBox clip instead of floating over the footer; transform changes during
+  opening animations invalidate the ruby size cache. F8 off/on restored native
+  text and then annotations without changing the main font.
+- Short and longer Haruka replay backlogs were opened. Native focus and voice
+  replay indicators remained usable, and F7 restored original dimensions. A
+  later reopen check exposed scheduling starvation and repeated work before
+  a cooperative checkpoint. The final scheduler rotates existing overlays;
+  completed native run updates are cached before yielding. Ordered native row
+  heights and scroll offset avoid stale offscreen geometry during culling.
+  Synthetic regressions cover interrupted long pages, bounded row-map rebuilds,
+  newly visible sources, and keeping the bottom endpoint after row growth.
+  The final package was checked with a longer log after automatic progression:
+  older rows gained readings after scrolling, F7 off/on restored native sizing
+  and annotations, and a close/reopen retained a fully visible last card once
+  preparation settled. Deferred endpoint correction did not prevent scrolling
+  upward. Native voice-control selection/indicators were observed; audio quality
+  was not measured.
+- Ordinary complete dialogue retains fixed 29/14 text and ruby. Manual holds,
+  F6 automatic progression, return to manual, F7 off/on, and startup skipping
+  were sampled. One overflowing choice retained native text because its ruby
+  did not fit the existing choice rectangle at 22/11.
+
+The final portable package has 26 owned runtime files and five helpers. Local
+installation hashes and source scripts were compared with its ZIP. Real
+removal/reinstallation restored both known English-patch files before disabling
+them again. Preferences were preserved. The package excludes private probes,
+profilers, original assets, and original base text.
+
+There are 126 synthetic tests: 81 Lua, 17 reading, 9 extraction, 12 Python
+installer, and 7 Windows portable tests. Synthetic lifecycle coverage exercises
+100 sources and 30 disable/reopen cycles; this is not a claim of 100 native
+backlog entries or 30 native menu reopens. The release lookup was compared with
+all 62,508 distinct private source strings, including 56,494 annotated matches.
+See [performance evidence](performance.md) for sampled frame intervals.
+
+Image support is limited to direct texture brushes with calibrated bindings.
+The 99 exported name-texture bindings were validated offline; this does not
+establish visual verification of every image-backed label or dynamic material.
+Unknown names, unresolved rich styles/markup, unmatched substitutions, and
+unsupported transforms retain native rendering. Lyrics are excluded. UI cold
+preparation can briefly leave native text visible. Full controller coverage,
+every DLC/screen, a continuous 60-minute final-build stability run, and a full
+playthrough remain unverified. The approximately 40-minute previous-candidate
+session and shorter final-package checks do not establish those guarantees.
+
+## v0.2 dialogue implementation and historical checks
 
 The development branch uses a build-locked native bridge for message assignment,
 completion waits, advance input, cleanup, and choices. It validates the Shipping

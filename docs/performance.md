@@ -1,5 +1,49 @@
 # Performance investigation
 
+## v0.3 name/menu/backlog package
+
+The late v0.3.0-alpha.1 candidate before the final deferred backlog-end adjustment
+was installed without a private probe or inspection mod. The same local
+1920 x 1080 Haruka Kizuna No.001 first held line
+was measured three times for 120 seconds, using the PresentMon method below.
+
+| Run | Frames | p95 (ms) | p99 (ms) | Maximum (ms) | Frames >50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 19,773 | 6.858 | 7.197 | 11.090 | 0 |
+| 2 | 19,531 | 6.851 | 7.248 | 815.323 | 7 |
+| 3 | 19,774 | 6.784 | 7.184 | 8.112 | 0 |
+
+Runs 1 and 3 had no intervals above 33.33 ms. Run 2 had nine, including seven
+above 50 ms, mostly clustered around 74-78 seconds. The cause was not attributed
+by this capture. These outliers remain a performance follow-up; p99 alone must
+not be used to describe the build as stutter-free. The v0.2 exact-ZIP reference
+from 2026-11-04 had p99 6.848 ms and maximum 10.625 ms in that scene. There
+is no new same-session paired baseline, so these measurements cannot establish
+whether the outliers came from the mod, the game, or other system activity.
+
+The final ZIP changes only when the backlog-end correction is requested after
+row growth; the held-line matrix was not repeated for that change. Final-package
+functional checks are recorded separately in [runtime verification](runtime.md).
+
+A separate 120-second automatic-progression capture of the final ZIP in the same replay recorded
+19,773 intervals, p95 6.740 ms, p99 7.151 ms and maximum 11.014 ms, with zero
+intervals above 33.33/50 ms. Manual progression was restored afterward. An earlier
+candidate's automatic capture contained one unattributed 115.130 ms interval;
+clean samples do not remove the open performance limitation.
+
+UI discovery is incremental, text/image admissions are separate, and live
+notifications outrank an unfinished initial snapshot. Existing overlays have
+rotating priority within half the budget during focus/scroll changes, leaving
+time for newly visible sources; root visibility is shared and inactive
+screens skip text lookup. Negative and positive reading lookups are bounded.
+Native font prepasses and generated runs checkpoint their cached work on the
+registered game-thread Lua state. The two-millisecond QPC budget is cooperative;
+one native operation can exceed it. It must not be described as a hard limit.
+
+The detailed v0.2 investigation and measurements follow for historical context.
+
+## v0.2 dialogue optimization
+
 The performance work targets repeated game-thread discovery and dialogue
 preparation in v0.2. It preserves the accepted font sizes and compact window.
 

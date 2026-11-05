@@ -1,6 +1,7 @@
 # Manual dialogue and fixed-size furigana
 
-This describes v0.2.0-alpha.1. The historical
+These dialogue controls are retained in v0.3.0-alpha.1. Name, menu, and backlog
+annotations have a [separate lifecycle](ui-annotations.md). The historical
 [v0.1.0-alpha.2 package](releases/v0.1.0-alpha.2.md) keeps its earlier behavior.
 See [performance measurements](performance.md) for the optimized runtime.
 
