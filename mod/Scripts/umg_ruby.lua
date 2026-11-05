@@ -58,20 +58,33 @@ function M.is_generated(object)
     return valid(made) and generated_names[made] == object:GetFullName()
 end
 
+local function overlay_canvas(parent, outer, canvas_class)
+    local host = create(canvas_class, outer)
+    local slot = parent:AddChildToCanvas(host)
+    -- Stretched, zero-offset slots contribute no desired size to SConstraintCanvas.
+    -- Absolute ruby bounds belong in an inner canvas; otherwise their padding
+    -- enlarges native auto-sized guide panels and shifts the original buttons.
+    slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 1, Y = 1}})
+    slot:SetAlignment({X = 0, Y = 0})
+    slot:SetPosition({X = 0, Y = 0})
+    slot:SetSize({X = 0, Y = 0})
+    slot:SetAutoSize(false)
+    host:SetVisibility(3)
+    local canvas = create(canvas_class, outer)
+    local content_slot = host:AddChildToCanvas(canvas)
+    canvas:SetVisibility(3)
+    return host, slot, canvas, content_slot
+end
+
 function M.attach_image(source, geometry)
     local parent = M.parent_of(source)
     while valid(parent) and not parent:IsA('/Script/UMG.CanvasPanel') do parent = M.parent_of(parent) end
     assert(valid(parent), 'Image has no CanvasPanel ancestor')
     local outer = source:GetOuter()
-    local host = create(required('/Script/UMG.CanvasPanel'), outer)
+    local host, slot, canvas, content_slot = overlay_canvas(parent, outer, required('/Script/UMG.CanvasPanel'))
     local name = host:GetFullName()
-    local slot = parent:AddChildToCanvas(host)
-    slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 0, Y = 0}})
-    slot:SetAlignment({X = 0, Y = 0})
-    slot:SetAutoSize(false)
     slot:SetZOrder(1000)
-    host:SetVisibility(3)
-    host:SetClipping(M.scroll_parent(source) and 1 or 2)
+    canvas:SetClipping(M.scroll_parent(source) and 1 or 2)
     local label = create(required('/Script/UMG.TextBlock'), outer)
     local font = label.Font
     font.FontObject = LoadAsset('/Game/Widget/Font/FONT-JP.FONT-JP')
@@ -85,7 +98,7 @@ function M.attach_image(source, geometry)
     color.SpecifiedColor.R, color.SpecifiedColor.G, color.SpecifiedColor.B, color.SpecifiedColor.A = 0.03, 0.03, 0.03, 1
     label:SetColorAndOpacity(color)
     label:SetVisibility(3)
-    local text_slot = host:AddChildToCanvas(label)
+    local text_slot = canvas:AddChildToCanvas(label)
     text_slot:SetAutoSize(true)
     local result = {source = source, parent = parent, options = {overlay_only = true}}
     function result:hide() if valid(host) and host:GetFullName() == name then host:SetVisibility(1) end end
@@ -104,11 +117,12 @@ function M.attach_image(source, geometry)
         end
         host:SetVisibility(3)
         local measured = self.measured
-        slot:SetPosition({X = g.position.X + (g.size.X * ((binding.left or 0) + (binding.right or 1))/2 - measured.X/2) * g.scale.X,
+        content_slot:SetPosition({X = g.position.X + (g.size.X * ((binding.left or 0) + (binding.right or 1))/2 - measured.X/2) * g.scale.X,
             Y = g.position.Y + ((binding.top or 0) * g.size.Y - measured.Y + 4 * dpi / (g.absolute_scale or 1)) * g.scale.Y})
-        slot:SetSize(measured)
-        host:SetRenderTransformPivot({X = 0, Y = 0})
-        host:SetRenderScale(g.scale)
+        content_slot:SetSize(measured)
+        content_slot:SetAutoSize(false)
+        canvas:SetRenderTransformPivot({X = 0, Y = 0})
+        canvas:SetRenderScale(g.scale)
         text_slot:SetPosition({X = 0, Y = 0})
         return true
     end
@@ -188,18 +202,22 @@ function M.attach(source, options)
     -- The fallback font holder is also used for measurement, so its live font
     -- struct can change. Preserve the base outline before measuring any ruby.
     self.base_outline = tonumber(self.font.OutlineSettings.OutlineSize) or 0
-    self.host = create(canvas_class, self.outer)
+    if options.geometry then
+        self.host, self.slot, self.canvas, self.content_slot = overlay_canvas(parent, self.outer, canvas_class)
+    else
+        self.host = create(canvas_class, self.outer)
+        self.host:SetVisibility(3) -- HitTestInvisible: preserve choice buttons below.
+        self.slot = parent:AddChildToCanvas(self.host)
+        assert(valid(self.slot), 'Could not attach ruby CanvasPanel')
+    end
     self.host_name = self.host:GetFullName()
-    self.host:SetVisibility(3) -- HitTestInvisible: preserve choice buttons below.
-    self.slot = parent:AddChildToCanvas(self.host)
-    assert(valid(self.slot), 'Could not attach ruby CanvasPanel')
     if vertical_box_slot then
         -- The outer canvas mirrors the font plate; the inner canvas mirrors the
         -- text's padding and render transform inside that one-child VerticalBox.
         self.canvas = create(canvas_class, self.outer)
         self.content_slot = self.host:AddChildToCanvas(self.canvas)
         self.canvas:SetVisibility(3)
-    else
+    elseif not options.geometry then
         self.canvas = self.host
     end
     -- A padded ruby-only host may cross a label's decorative clip rectangle.
@@ -295,14 +313,15 @@ function Renderer:_sync_slot()
         if self.sync_geometry_key == key then return end
         self.sync_geometry_key = key
         local padding = self.options.pad_overlay and 32 or 0
-        self.slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 0, Y = 0}})
-        self.slot:SetAlignment({X = 0, Y = 0})
-        self.slot:SetPosition({X = geometry.position.X - padding * geometry.scale.X,
+        local slot = self.content_slot
+        slot:SetAnchors({Minimum = {X = 0, Y = 0}, Maximum = {X = 0, Y = 0}})
+        slot:SetAlignment({X = 0, Y = 0})
+        slot:SetPosition({X = geometry.position.X - padding * geometry.scale.X,
             Y = geometry.position.Y - padding * geometry.scale.Y})
-        self.slot:SetSize({X = geometry.size.X + padding * 2, Y = geometry.size.Y + padding})
-        self.slot:SetAutoSize(false)
-        self.host:SetRenderTransformPivot({X = 0, Y = 0})
-        self.host:SetRenderScale(geometry.scale or {X = 1, Y = 1})
+        slot:SetSize({X = geometry.size.X + padding * 2, Y = geometry.size.Y + padding})
+        slot:SetAutoSize(false)
+        self.canvas:SetRenderTransformPivot({X = 0, Y = 0})
+        self.canvas:SetRenderScale(geometry.scale or {X = 1, Y = 1})
         return
     end
     -- FGeometry is opaque and marshals as zeroes on this game's UE4SS build.

@@ -314,6 +314,53 @@ class BacklogTests(unittest.TestCase):
         ''')
 
 
+class OverlayLayoutTests(unittest.TestCase):
+    def test_padded_overlay_does_not_inflate_native_canvas_desired_size(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
+        lua.execute('''
+            local ruby=require('umg_ruby')
+            local overlay_canvas, renderer
+            for i=1,100 do
+                local name,value=debug.getupvalue(ruby.attach,i)
+                if name=='overlay_canvas' then overlay_canvas=value end
+                if name=='Renderer' then renderer=value end
+            end
+            local function slot()
+                return {IsValid=function()return true end,
+                    SetAnchors=function(self,v)self.anchors=v end,
+                    SetAlignment=function()end,SetAutoSize=function()end,
+                    SetPosition=function(self,v)self.position=v end,
+                    SetSize=function(self,v)self.size=v end}
+            end
+            local function canvas(name)
+                return {IsValid=function()return true end,GetAddress=function()return name end,
+                    GetFullName=function()return name end,SetVisibility=function()end,
+                    SetRenderTransformPivot=function()end,SetRenderScale=function(self,v)self.scale=v end,
+                    AddChildToCanvas=function()return slot() end}
+            end
+            function FName(name)return name end
+            function StaticConstructObject(_,_,name)return canvas(name) end
+            local host,outer,content,inner=overlay_canvas(canvas('Native'),nil,canvas('CanvasClass'))
+            local g={position={X=140,Y=12},size={X=42,Y=24},scale={X=1,Y=1}}
+            local r=setmetatable({host=host,slot=outer,canvas=content,content_slot=inner,
+                options={pad_overlay=true,geometry=function()return g end}},renderer)
+            for _,scale in ipairs({1,0.65,2}) do
+                g.scale={X=scale,Y=scale}
+                r:_sync_slot()
+                -- Slate ignores offsets on stretched axes when computing a
+                -- CanvasPanel's desired size. Fixed-axis children contribute.
+                local width=outer.anchors.Minimum.X==outer.anchors.Maximum.X and
+                    math.abs(outer.position.X)+outer.size.X or 0
+                local height=outer.anchors.Minimum.Y==outer.anchors.Maximum.Y and
+                    math.abs(outer.position.Y)+outer.size.Y or 0
+                assert(width==0 and height==0)
+                assert(inner.position.X==140-32*scale and inner.position.Y==12-32*scale)
+                assert(inner.size.X==106 and inner.size.Y==56 and content.scale.X==scale)
+            end
+        ''')
+
+
 class GeometryTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)

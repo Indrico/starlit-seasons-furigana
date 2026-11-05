@@ -8,10 +8,16 @@ in **English**.
 
 ## Current development milestone
 
-The current milestone is **v0.3.0-alpha.1**, adding names, Japanese menus,
+The current milestone is **v0.3.0-alpha.2**, adding names, Japanese menus,
 and backlog to the existing dialogue/choice implementation. Check the actual
 GitHub tag and release assets before assuming publication succeeded.
 Read [UI annotations](docs/ui-annotations.md) before editing the new lifecycle.
+
+Alpha.2 fixes the generated overlays inflating native auto-sized menu panels.
+Geometry-based text and image overlays use an outer CanvasPanel with stretched
+anchors and zero offsets; absolute bounds, padding, and scale live on its inner
+canvas. Keep the outer slot free of a desired-size contribution. A fixed-anchor
+padded host enlarged the footer background and shifted Enter/Esc to the left.
 
 - Native menu/name glyphs remain visible; ruby is a sibling overlay. Menus use
   ordinary minimum 11 (7-10 for compact captions) / ratio 0.4 following the user's smaller-menu request. Names and
@@ -44,7 +50,7 @@ Read [UI annotations](docs/ui-annotations.md) before editing the new lifecycle.
   and temporary UI samplers. Inspect the live ownership state before changing it.
 
 `main` contains the v0.3 UI extension and the v0.2 dialogue/performance changes.
-The player prerelease is **v0.3.0-alpha.1**; verify its GitHub metadata and asset
+The player prerelease is **v0.3.0-alpha.2**; verify its GitHub metadata and asset
 checksum before installation. Do not overwrite historical release assets.
 The user's local `plan.md` is intentionally untracked.
 
@@ -138,9 +144,9 @@ The public repository is
   `75dc8b081d324fe0598a87b26e37d13a84d3648cbb1d08eb48c514376407a11b`.
   The experimental URL can change; verify the hash and do not substitute a
   newer loader without compatibility testing.
-- Player asset: `starlit-season-furigana-v0.3.0-alpha.1-windows-x64.zip`.
+- Player asset: `starlit-season-furigana-v0.3.0-alpha.2-windows-x64.zip`.
   ZIP SHA-256:
-  `fb99f01773cf4482e6eda39792d5863fe235d392cfde943ec3de29e65a31a078`.
+  `48e9206b054466f1e49da68c068e336bf8a19fc3fefd90f34fe592a452acb689`.
 
 Extract all ZIP contents next to `StarlitSeason.exe`,
 run `Check-Furigana.cmd` with the game closed, then launch through Steam.
@@ -271,8 +277,8 @@ python -m venv .venv
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 ```
 
-The current suites contain **126 tests**: 17 reading, 9 extraction, 12
-Python installer, 7 Windows portable, and 81 Lua lookup/layout/runtime/controller/menu/performance
+The current suites contain **127 tests**: 17 reading, 9 extraction, 12
+Python installer, 7 Windows portable, and 82 Lua lookup/layout/runtime/controller/menu/performance
 tests. These use synthetic data without launching the game. Portable tests
 require Windows; Lua tests require the development dependencies.
 
@@ -287,7 +293,7 @@ The exact release ZIP passed a real clean runtime install, Steam launch,
 visible furigana, F7 off/on, removal with identical patch restoration hashes,
 and reinstallation. Verify the published download against the checksum above.
 See [the verification record](docs/runtime.md) and
-[release notes](docs/releases/v0.3.0-alpha.1.md) for evidence.
+[release notes](docs/releases/v0.3.0-alpha.2.md) for evidence.
 
 For documentation-only changes, check links, commands, and `git diff --check`;
 re-running game tests is unnecessary. For behavior changes, run affected suites
@@ -354,7 +360,7 @@ mod is installed. Do not reinstall or remove a working runtime merely to edit
 source documentation. Keep private test probes out of the final player package.
 
 The v0.3 player ZIP is in the sibling
-`releases/v0.3.0-alpha.1-candidate5/` directory, with the checksum above.
+`releases/v0.3.0-alpha.2-candidate1/` directory, with the checksum above.
 The historical optimized v0.2 ZIP is in `releases/v0.2.0-alpha.1-optimized/`. The
 `v0.2.0-alpha.1-final` folder and candidate record describe an earlier functional
 checkpoint, not the optimized release. Private profiling ZIPs must never be

@@ -9,6 +9,13 @@ Padded ruby may cross decorative label clips, but always intersects a native
 ScrollBox clip. Otherwise readings from offscreen menu rows would float above
 the screen's footer.
 
+Since alpha.2, geometry-based text and image overlays use a stretched outer
+CanvasPanel with zero slot offsets. This contributes no size to the native
+CanvasPanel's desired-size calculation. An inner canvas holds the source's
+absolute geometry, ruby padding, and render scale. Keep those bounds off the
+outer slot: otherwise native auto-sized control-guide panels grow and move
+Enter/Esc when annotations appear. Scroll clipping remains on the inner canvas.
+
 The user requested smaller menu readings after inspecting the first candidate.
 Ordinary menu captions use an 11-unit minimum and a 0.4 base-font ratio. Small
 native captions use a proportional 7–10-unit minimum to avoid oversized

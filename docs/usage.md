@@ -1,4 +1,4 @@
-# Drag-and-drop installation — v0.3.0-alpha.1
+# Drag-and-drop installation — v0.3.0-alpha.2
 
 The Windows package includes the UE4SS loader, compiled native bridge, and prebuilt furigana annotations.
 **No Python, compilation, game-data extraction, or separate downloads are needed.**
@@ -11,8 +11,8 @@ See [UI support and limits](ui-annotations.md) and [controls](dialogue-controls.
 
 ## Fresh installation
 
-1. Download **`starlit-season-furigana-v0.3.0-alpha.1-windows-x64.zip`** from the
-   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.1).
+1. Download **`starlit-season-furigana-v0.3.0-alpha.2-windows-x64.zip`** from the
+   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.2).
    Choose this asset rather than GitHub's automatic **Source code** archives.
 2. Close the game. In Steam, open **Properties → Installed Files → Browse**.
 3. Extract **all contents** of the ZIP into that game folder, next to

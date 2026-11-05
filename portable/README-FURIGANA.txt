@@ -1,4 +1,4 @@
-STARLIT SEASON FURIGANA - v0.3.0-alpha.1 PRERELEASE
+STARLIT SEASON FURIGANA - v0.3.0-alpha.2 PRERELEASE
 
 Requires THE IDOLM@STER STARLIT SEASON 1.61 / Steam build 8278842 on Windows x64.
 The UE4SS loader, prebuilt native bridge, and furigana annotations are included.

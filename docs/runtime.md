@@ -1,6 +1,27 @@
 # Runtime behavior and verification
 
-## v0.3 names, menus, and backlog
+## Alpha.2 menu-layout correction
+
+On 2026-11-06, the alpha.2 package was checked at a 1920 x 1080 client viewport.
+The main menu's Album help banner and Enter/Esc guides retained their native
+positions when comparing F7 off/on. The bottom-right gray background no longer
+grew to contain the generated overlay's padding. Options System scrolling kept
+ruby inside its scrolling area, and the Album character header/replay titles
+retained their main fonts and annotations. The first two Haruka No.001 replay
+lines and their short backlog retained body/name readings after preparation.
+This did not repeat alpha.1's long-log or frame-time matrix.
+
+The geometry-based overlay now stretches its outer slot with zero offsets;
+only an inner canvas receives the absolute source bounds and scale. The source
+suites contain 127 tests, including a regression for native desired-size
+contributions at several scales. The package retains the same native DLL and
+reading dataset. Frame-time captures were not repeated for this layout update;
+the alpha.1 outliers below remain an open follow-up. This focused check does not
+extend the full-game, controller, or stability coverage recorded below.
+The exact ZIP passed removal/reinstallation with all 26 runtime hashes checked;
+both known English-patch restoration hashes and saved preferences matched.
+
+## Alpha.1 names, menus, and backlog verification
 
 Version 0.3 keeps the native dialogue bridge and adds an independent lifecycle
 for Japanese UI. Native menu/name glyphs remain visible with ruby-only overlays;
