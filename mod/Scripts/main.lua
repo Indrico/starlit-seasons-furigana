@@ -27,6 +27,22 @@ local function log(message)
 end
 local ui = require('ui_annotations').new(database, bridge, require('ui_bindings'), log)
 ui:set_enabled(master_enabled and enabled)
+local performance_suspended = false
+local performance = require('performance_guard').new(function()
+    return bridge and bridge.clock and bridge.clock() or os.clock()
+end, function(active)
+    performance_suspended = active
+    ui:set_suspended(active)
+    if active then
+        if controller then controller:clear() end
+        for _, entry in pairs(entries) do
+            if entry.renderer then entry.renderer:detach() end
+            entry.renderer, entry.applied, entry.last_attempt_key = nil, false, nil
+            entry.native_generation, entry.choice_ready = nil, nil
+        end
+    end
+    log(active and 'MV/live: furigana work suspended.' or 'MV/live ended: furigana work resumed.')
+end)
 
 local function is_dialogue_source(object)
     local name = object:GetFullName()
@@ -106,7 +122,7 @@ local function options_for(entry)
 end
 
 local function inspect(entry, immediate)
-    if not master_enabled then return end
+    if not master_enabled or performance_suspended then return end
     if native_ready and not entry.native_generation and not entry.choice_ready then return end
     -- Native assignment/choice events own the text. Idle ticks only check geometry.
     local text = native_ready and not immediate and entry.last_text or entry.source:GetText():ToString()
@@ -183,14 +199,14 @@ function StarlitFuriganaNativeReady()
 end
 
 function StarlitFuriganaNativeLine(widget_address, generation, expected_text)
-    if not master_enabled then return end
+    if not master_enabled or performance:poll(true) then return end
     StarlitFuriganaNativeClear()
     controller:set_line(nil, expected_text)
     local owner = owners:find(widget_address)
     if owner then
         if owner:IsA('/Script/imal.WidgetCommuScriptMessage') then
             local name = owner._WidgetName
-            if name and name:IsValid() then ui:changed(name._TextName) end
+            if name and name:IsValid() then ui:changed(name._TextName, true) end
         end
         for _, field_name in ipairs({'_TextMessage', '_TextMonologue', '_TextBase'}) do
             local ok, source = pcall(function() return owner[field_name] end)
@@ -220,11 +236,11 @@ function StarlitFuriganaNativeClear()
 end
 
 function StarlitFuriganaNativeAutoTick(delta)
-    if controller then controller:tick(delta) end
+    if controller and not performance_suspended then controller:tick(delta) end
 end
 
 function StarlitFuriganaConsumeAdvance()
-    if not controller then return false end
+    if not controller or performance_suspended then return false end
     local ok, consumed = pcall(controller.advance, controller)
     if not ok then
         log('Pagination unavailable; native advance restored: ' .. tostring(consumed))
@@ -234,7 +250,7 @@ function StarlitFuriganaConsumeAdvance()
 end
 
 function StarlitFuriganaNativeChoices()
-    if not master_enabled then return end
+    if not master_enabled or performance:poll(true) then return end
     discover()
     for _, entry in pairs(entries) do
         if entry.name:find('WBP_Commu_Select_C', 1, true) then
@@ -267,6 +283,7 @@ local function tick()
     local pending = commands
     commands = {}
     for _, callback in ipairs(pending) do callback() end
+    if performance:poll() then return end
     menu:tick()
     if native_ready then startup.tick(master_enabled) end
     discover()
@@ -320,6 +337,8 @@ end)
 bind(Key.F8, function() menu:toggle_visible() end)
 
 LoopInGameThreadWithDelay(16, function()
+    local detected, active = pcall(performance.poll, performance)
+    if not detected or active then return end
     local ok, error_message = pcall(ui.tick, ui)
     if not ok then log('UI annotations deferred: ' .. tostring(error_message)) end
 end)

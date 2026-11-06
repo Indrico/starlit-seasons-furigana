@@ -1,6 +1,51 @@
 # Performance investigation
 
-## v0.3 name/menu/backlog package
+## Alpha.3 UI preparation and MV/live suspension
+
+The performance gate uses a single initial `LiveManager` snapshot and queued
+construction notifications. The native manager was absent in S4U setup, present
+in the running performance, and absent after returning to setup on this build.
+Cached validity/identity checks are throttled to 250 ms; a native line assignment
+can check earlier. There is no repeated global scan to detect music or scenes.
+
+While suspended, the UI timer returns before registry admission, lookups,
+geometry, font prepasses, and generated run updates. SetText callbacks return
+before reading their context. The 250 ms dialogue/menu discovery loop also
+returns. Existing overlays and backlog sizing restore once on entry. The
+loader/native bridge stay loaded; trivial timers and queued object references
+remain. Synthetic integration checks verify no discovery scans, native line
+updates, or UI ticks during suspension, then verify rendering resumes.
+
+Outside performances, UI callbacks and the timer share a cooperative six-ms
+budget per 16 ms window; a single callback can use up to four ms. Native
+operations may exceed those deadlines. Shared UI metrics are bounded to 4,096
+entries and keyed by font/style/size/DPI/geometry scale; each renderer also keeps
+its existing local bound. Ready geometry can finish in a native assignment
+callback. Native text remains visible during cold preparation. New-screen
+admission, first valid geometry, and screen animation can still delay readings;
+private geometry-ready timing probes do not establish zero first-frame pop-in.
+
+Two exploratory 60-second captures used S4U, SESSION!, five idols, the live-house
+stage, auto camera, and a 1920 x 1080 client on 2026-11-06:
+
+| Capture | Frames | p95 (ms) | p99 (ms) | Maximum (ms) | >33.33 ms | >50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before suspension (candidate, private read-only inspection installed) | 7,472 | 11.086 | 13.484 | 128.710 | 8 | 4 |
+| Alpha.3 clean ZIP, suspension active | 6,744 | 12.517 | 37.854 | 49.015 | 141 | 0 |
+
+Both raw captures are retained privately. The inspection snapshot was triggered
+immediately before the first capture; it may overlap its initial seconds. The
+song/camera phases and capture start times were not synchronized. These are
+not a controlled before/after comparison. The suspended build has a worse p99
+and more intervals above 33.33 ms in its sample; the smaller maximum and zero
+>50 ms intervals do not establish an overall improvement. Frame pacing remains
+an open issue even with the furigana work gate active. CPU/GPU attribution and
+matched-scene vanilla/loader comparisons are still needed before assigning
+those stalls to the game, loader, native bridge, or other system activity.
+
+The measurements below remain historical and must not be attributed to alpha.3.
+
+## Historical alpha.1 name/menu/backlog package
 
 The late v0.3.0-alpha.1 candidate before the final deferred backlog-end adjustment
 was installed without a private probe or inspection mod. The same local

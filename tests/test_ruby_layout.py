@@ -55,6 +55,44 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(result['runs'][1]['base'], '学')
         self.assertIsNone(result['runs'][1]['reading'])
 
+    def test_nonwrapping_menu_measures_span_boundaries_instead_of_every_plain_character(self):
+        self.lua.execute('calls=0')
+        measure = self.lua.eval('function(text,size) calls=calls+1;return utf8.len(text)*size end')
+        segments = self.lua.table_from([self.lua.table_from({'base': 'x' * 80}),
+            self.lua.table_from({'base': 'AB', 'reading': 'abcdef'}), self.lua.table_from({'base': 'tail'})])
+        result = self.layout.layout(segments, self.lua.table_from({'width': 2000,
+            'measure': measure, 'base_size': 20, 'ruby_size': 10, 'overlay_only': True, 'no_wrap': True}))
+        self.assertEqual(self.lua.globals().calls, 4)
+        self.assertEqual(result.runs[2].x, 1600)
+        self.assertEqual(result.line_widths[1], 1720)
+
+    def test_nonwrapping_menu_chunks_preserve_crlf_and_native_justification(self):
+        segments = self.lua.table_from([self.lua.table_from({'base': 'prefix\r\n'}),
+            self.lua.table_from({'base': 'AB', 'reading': 'read'}), self.lua.table_from({'base': '\ntail'})])
+        result = self.layout.layout(segments, self.lua.table_from({'width': 200,
+            'measure': self.measure, 'base_size': 20, 'ruby_size': 10,
+            'overlay_only': True, 'no_wrap': True, 'justification': 1}))
+        self.assertEqual(result.lines, 3)
+        self.assertEqual(result.runs[2].line, 2)
+        self.assertEqual(result.runs[2].x, 80)
+
+    def test_plain_log_runs_merge_without_moving_readings_or_crossing_lines(self):
+        result = self.run_layout([{'base': 'abcdefgh'}, {'base': 'AB', 'reading': 'read'}, {'base': 'tail'}], width=120)
+        old_reading = next(run for run in result.runs.values() if run.reading)
+        old_x, old_y = old_reading.ruby_x, old_reading.ruby_y
+        old_count = len(result.runs)
+        result = self.layout.compact_plain(result, self.measure)
+        self.assertLess(len(result.runs), old_count)
+        merged_reading = next(run for run in result.runs.values() if run.reading)
+        self.assertEqual((merged_reading.ruby_x, merged_reading.ruby_y), (old_x, old_y))
+        self.assertEqual(result.runs[1].base, 'abcdef')
+
+    def test_plain_log_compaction_rejects_a_kerning_change(self):
+        result = self.run_layout([{'base': 'AV'}])
+        kerned = self.lua.eval('function(text,size) return text=="AV" and 30 or utf8.len(text)*size end')
+        result = self.layout.compact_plain(result, kerned)
+        self.assertEqual(len(result.runs), 2)
+
     def test_reveal_does_not_change_word_position(self):
         parts = [{'base': '今日', 'reading': 'きょう'}, {'base': '学校', 'reading': 'がっこう'}]
         full, partial = self.run_layout(parts, width=60), self.run_layout(parts, width=60, visible=3)

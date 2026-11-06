@@ -1,5 +1,42 @@
 # Runtime behavior and verification
 
+## Alpha.3 MV/live suspension and UI preparation
+
+On 2026-11-06, the exact alpha.3 ZIP was installed and launched through Steam
+on the supported build at a 1920 x 1080 client viewport. It contained the
+unchanged native DLL and annotation dataset, 27 owned runtime files, and five
+helpers. All owned hashes and source Lua files matched the ZIP. Private
+inspection/timing probes were absent from this package.
+
+S4U setup retained its menu annotations. Starting SESSION! with five idols on
+the live-house stage logged suspension before the performance appeared. The
+running MV and native pause menu kept their native text and controls, without
+mod annotations. Leaving the performance without saving its recording logged
+resumption; setup/menu annotations returned. The manager lifetime also covers
+photo mode, but photo-mode input was not separately exercised in this check.
+Normal-play live/audition/festival families remain unverified.
+
+After the MV, the main-menu Album banner and Enter/Esc guide retained their
+native layout with F7 off/on. Haruka's Album name/header and replay titles gained
+readings after cold preparation. The first two No.001 replay lines retained
+manual progression and the accepted fixed dialogue sizes. The speaker name and
+two-row backlog, including its wrapped body, rendered readings. New-screen
+geometry/admission can still expose native text before ruby; this is not a
+verification of immediate first-frame readings everywhere. Options scrolling,
+the longer-log matrix, and F8 were not repeated for alpha.3.
+
+The source suites passed **147 tests**: 102 Lua/runtime, 17 readings, 9 extraction,
+12 Python installer, and 7 Windows portable tests. The exact ZIP passed a real
+removal/reinstallation cycle after runtime checks. Both known English-patch
+files restored to their original hashes; enabled/manual preferences and timing
+values survived. The final local installation is the clean portable package,
+enabled and manual, with the game closed.
+
+Exploratory 60-second MV captures still show frame-time spikes with suspension
+active. The phases were not synchronized, and the suspended sample had a worse
+p99. See [all measurements and limitations](performance.md); this release does
+not establish an overall FPS improvement or remove the open stuttering issue.
+
 ## Alpha.2 menu-layout correction
 
 On 2026-11-06, the alpha.2 package was checked at a 1920 x 1080 client viewport.

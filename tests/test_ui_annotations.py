@@ -66,6 +66,56 @@ class UIAnnotationTests(unittest.TestCase):
         self.assertEqual(self.state.updates, 2)
         self.assertEqual(self.state.scans, 3)
 
+    def test_mv_suspension_stops_discovery_and_preparation_then_resumes(self):
+        self.lua.execute('''
+            test_tick();ui:set_suspended(true)
+            local before_scans,before_updates=scans,updates
+            for i=1,100 do
+                ui:changed(source(i+10),true)
+                test_tick()
+            end
+            assert(scans==before_scans and updates==before_updates and detaches==1)
+            assert(next(ui.active)==nil)
+            ui:set_suspended(false);test_tick()
+            assert(updates==before_updates+1 and ui.enabled)
+        ''')
+
+    def test_mv_resume_preserves_furigana_off_preference(self):
+        self.lua.execute('''
+            test_tick();ui:set_suspended(true);ui:set_enabled(false)
+            ui:set_suspended(false);test_tick()
+            assert(updates==1 and not ui.enabled)
+            ui:set_enabled(true);test_tick();assert(updates==2)
+        ''')
+
+    def test_repeated_mv_state_does_not_repeat_overlay_teardown(self):
+        self.lua.execute('''
+            test_tick();ui:set_suspended(true);ui:set_suspended(true)
+            assert(detaches==1)
+            ui:set_enabled(true);test_tick();assert(updates==1)
+            ui:set_suspended(false);test_tick();assert(updates==2)
+        ''')
+
+    def test_ready_text_change_can_finish_before_the_native_callback_returns(self):
+        self.lua.execute('ui:changed(objects[1],true)')
+        self.assertEqual(self.state.updates, 1)
+        self.assertTrue(self.lua.eval('ui.entries[1].key~=nil and next(ui.urgent)==nil'))
+        self.lua.execute('test_tick()')
+        self.assertEqual(self.state.updates, 1)
+
+    def test_many_native_callbacks_share_a_budget_instead_of_forcing_all_cold_work(self):
+        self.lua.execute('''
+            local attach=package.loaded.umg_ruby.attach
+            package.loaded.umg_ruby.attach=function(w,options)
+                local renderer=attach(w,options)
+                renderer.update=function()updates=updates+1;clock=clock+0.0035;return true end
+                return renderer
+            end
+            for i=1,10 do ui:changed(source(i),true) end
+        ''')
+        self.assertEqual(self.state.updates, 2)
+        self.assertEqual(self.lua.eval('(function()local n=0;for _ in pairs(ui.urgent)do n=n+1 end;return n end)()'), 8)
+
     def test_idle_and_notifications_never_repeat_global_scans(self):
         self.lua.execute('''
             test_tick()
@@ -94,6 +144,13 @@ class UIAnnotationTests(unittest.TestCase):
         self.assertFalse(self.state.module.eligible(self.state.objects[1]))
         self.lua.execute("objects[1].generated=false;objects[1].name='TextBlock /Engine/Transient.WBP_Lyric_C'")
         self.assertFalse(self.state.module.eligible(self.state.objects[1]))
+
+    def test_shared_canvas_fade_can_prepare_but_a_hidden_source_keeps_native_behavior(self):
+        self.lua.execute('package.loaded.umg_ruby.parent_of(objects[1]).RenderOpacity=0;test_tick()')
+        self.assertEqual(self.state.updates, 1)
+        self.lua.execute('ui:set_enabled(false);objects[1].RenderOpacity=0;ui:set_enabled(true);test_tick()')
+        self.assertEqual(self.state.updates, 1)
+
 
     def test_person_name_keeps_larger_reading_than_menu(self):
         self.lua.execute('''
@@ -136,6 +193,22 @@ class UIAnnotationTests(unittest.TestCase):
             for i=1,10 do test_tick() end
         ''')
         self.assertTrue(self.lua.eval('ui.entries[100].applied'))
+
+    def test_opening_a_discovered_screen_bypasses_the_old_inactive_text_poll(self):
+        self.lua.execute('''
+            local canvas=package.loaded.umg_ruby.parent_of(objects[1])
+            root={active=false,RenderOpacity=1,IsValid=function()return true end,IsVisible=function()return true end,
+                GetAddress=function()return 900 end,GetFullName=function()return 'screen' end,
+                IsInViewport=function(self)return self.active end,IsA=function(_,class)return class=='/Script/UMG.UserWidget' end}
+            package.loaded.umg_ruby.parent_of=function(w)
+                if w==root then return nil end
+                return w==canvas and root or canvas
+            end
+            ui:tick()
+            ui.entries[1].next_poll=10
+            root.active=true;clock=0.02;ui:tick()
+        ''')
+        self.assertEqual(self.state.updates, 1)
 
     def test_preparation_spans_ticks_and_toggle_cancels_partial_work(self):
         self.lua.execute('''

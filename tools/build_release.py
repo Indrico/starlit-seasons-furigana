@@ -11,7 +11,7 @@ from readings.export_annotations import annotations, write_lua
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = 'v0.3.0-alpha.2'
+VERSION = 'v0.3.0-alpha.3'
 
 
 def build(loader_zip, readings_json, output, native_dll, ui_bindings=None):

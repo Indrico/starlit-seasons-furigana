@@ -9,6 +9,7 @@ Renderer.__index = Renderer
 local generated = setmetatable({}, {__mode = 'v'})
 local generated_names = setmetatable({}, {__mode = 'k'})
 local generated_sequence = 0
+local shared_measurements, shared_measurement_keys, shared_measurement_cursor = {}, {}, 1
 
 local function valid(object)
     return object and object:IsValid()
@@ -203,6 +204,15 @@ function M.attach(source, options)
     -- struct can change. Preserve the base outline before measuring any ruby.
     self.base_outline = tonumber(self.font.OutlineSettings.OutlineSize) or 0
     if options.geometry then
+        local ok, key = pcall(function()
+            local has_spacing, spacing = pcall(function() return self.font.LetterSpacing end)
+            return self.font.FontObject:GetFullName() .. ':' .. self.font.TypefaceFontName:ToString() .. ':' ..
+                (has_spacing and tostring(spacing) or 'default') .. ':' .. tostring(options.overlay_only and 0 or self.base_outline) .. ':' ..
+                tostring(options.ruby_outline or 0)
+        end)
+        if ok then self.measure_font_key = key end
+    end
+    if options.geometry then
         self.host, self.slot, self.canvas, self.content_slot = overlay_canvas(parent, self.outer, canvas_class)
     else
         self.host = create(canvas_class, self.outer)
@@ -249,17 +259,22 @@ end
 function Renderer:_set_text(block, text, size, role)
     -- SetFont copies the source font. Changes to the child's font do not modify
     -- the original dialogue widget's FSlateFontInfo.
-    block:SetFont(self.font)
-    local font = block.Font
-    font.Size = size
-    font.OutlineSettings.OutlineSize = role == 'ruby' and (self.options.ruby_outline or 0) or
-        self.options.overlay_only and 0 or self.base_outline
-    if role == 'ruby' and self.options.ruby_outline and self.color then
-        local color, outline = self.color.SpecifiedColor, font.OutlineSettings.OutlineColor
-        local shade = (color.R + color.G + color.B) / 3 > 0.6 and 0.03 or 1
-        outline.R, outline.G, outline.B, outline.A = shade, shade, shade, 0.9
+    self.widget_styles = self.widget_styles or setmetatable({}, {__mode = 'k'})
+    local style_key = role .. ':' .. tostring(size)
+    if not self.options.geometry or self.widget_styles[block] ~= style_key then
+        block:SetFont(self.font)
+        local font = block.Font
+        font.Size = size
+        font.OutlineSettings.OutlineSize = role == 'ruby' and (self.options.ruby_outline or 0) or
+            self.options.overlay_only and 0 or self.base_outline
+        if role == 'ruby' and self.options.ruby_outline and self.color then
+            local color, outline = self.color.SpecifiedColor, font.OutlineSettings.OutlineColor
+            local shade = (color.R + color.G + color.B) / 3 > 0.6 and 0.03 or 1
+            outline.R, outline.G, outline.B, outline.A = shade, shade, shade, 0.9
+        end
+        block:SetFont(font)
+        self.widget_styles[block] = style_key
     end
-    block:SetFont(font)
     block:SetText(self.text_library:Conv_StringToText(text))
 end
 
@@ -268,21 +283,46 @@ function Renderer:_measure(text, size, role)
     local font_key = role .. ':' .. tostring(size)
     local key = font_key .. ':' .. text
     if not self.widths[key] then
-        self.measure_widget:SetVisibility(3)
-        self:_set_text(self.measure_widget, text, size, role)
-        self.measure_widget:InvalidateLayoutAndVolatility()
-        self.measure_widget:ForceLayoutPrepass()
-        local size_box = self.measure_widget:GetDesiredSize()
-        self.measure_widget:SetVisibility(1)
+        local shared_key = self.measure_context and self.measure_context .. ':' .. key
+        local measured = shared_key and shared_measurements[shared_key]
+        local native_work = not measured
+        if not measured then
+            local widget = self.measure_widget
+            if self.options and self.options.geometry then
+                -- Separate roles retain their font instead of copying and
+                -- changing FSlateFontInfo for every base/ruby boundary.
+                if role == 'ruby' then
+                    if not self.ruby_measure_widget then
+                        self.ruby_measure_widget = self:_text_widget()
+                        self.ruby_measure_widget:SetRenderOpacity(0)
+                    end
+                    widget = self.ruby_measure_widget
+                end
+            end
+            widget:SetVisibility(3)
+            self:_set_text(widget, text, size, role)
+            widget:InvalidateLayoutAndVolatility()
+            widget:ForceLayoutPrepass()
+            local size_box = widget:GetDesiredSize()
+            measured = {width = size_box.X, height = size_box.Y}
+            widget:SetVisibility(1)
+            if shared_key then
+                local expired = shared_measurement_keys[shared_measurement_cursor]
+                if expired then shared_measurements[expired] = nil end
+                shared_measurement_keys[shared_measurement_cursor] = shared_key
+                shared_measurement_cursor = shared_measurement_cursor % 4096 + 1
+                shared_measurements[shared_key] = measured
+            end
+        end
         -- Font/style belong to this renderer; widths are in local Slate units,
         -- independent of viewport scaling. Keep at most 2048 measured strings.
         local expired = self.width_keys[self.width_cursor]
         if expired then self.widths[expired] = nil end
         self.width_keys[self.width_cursor] = key
         self.width_cursor = self.width_cursor % 2048 + 1
-        self.widths[key] = size_box.X
-        self.heights[font_key] = math.max(self.heights[font_key] or 0, size_box.Y)
-        if self.options and self.options.yield_work then self.options.yield_work() end
+        self.widths[key] = measured.width
+        self.heights[font_key] = math.max(self.heights[font_key] or 0, measured.height)
+        if native_work and self.options and self.options.yield_work then self.options.yield_work() end
     end
     return self.widths[key]
 end
@@ -606,6 +646,8 @@ function Renderer:update(segments, visible_count)
     local min_ruby = self.options.min_ruby_size or 8
     if self.options.geometry then
         local g = self.options.geometry(self.source, self.parent)
+        self.measure_context = self.measure_font_key and self.measure_font_key .. ':' .. tostring(scale) .. ':' ..
+            string.format('%.4f', g and g.absolute_scale or 1)
         if g and g.absolute_scale and g.absolute_scale > 0 then min_ruby = math.ceil(min_ruby * scale / g.absolute_scale) end
     end
     local result
@@ -630,6 +672,9 @@ function Renderer:update(segments, visible_count)
             native_line_height = base_height * (tonumber(self.source.LineHeightPercentage) or 1),
             no_wrap = self.options.overlay_only and not self.source.AutoWrapText and (tonumber(self.source.WrapTextAt) or 0) <= 0,
         })
+        if self.options.compact_plain_runs then
+            result = Layout.compact_plain(result, function(text, font_size, role) return self:_measure(text, font_size, role) end)
+        end
         result.fit_summary = string.format('base=%d ruby=%d lines=%d height=%.2f/%.2f baseH=%.2f rubyH=%.2f width=%.2f',
             base_size, ruby_size, result.lines, result.height, height, base_height, ruby_height, width)
         if result.height <= height then break end

@@ -20,11 +20,15 @@ function M.eligible(w)
 end
 
 local function visible(w, renderer)
-    local first, top = true, nil
+    local first, top, shared_parent = true, nil, false
     while valid(w) do
         if not w:IsVisible() then return false end
         if w:IsA('/Script/UMG.UserWidget') then top = w end
-        if w.RenderOpacity and w.RenderOpacity < 0.01 and not (first and renderer and not renderer.options.overlay_only) then return false end
+        -- The overlay inherits its CanvasPanel's fade. Prepare during that
+        -- fade instead of waiting until the native text is already visible.
+        if w:IsA('/Script/UMG.CanvasPanel') then shared_parent = true end
+        if not shared_parent and w.RenderOpacity and w.RenderOpacity < 0.01 and
+            not (first and renderer and not renderer.options.overlay_only) then return false end
         first, w = false, Ruby.parent_of(w)
     end
     return not top or top:IsInViewport()
@@ -36,6 +40,12 @@ function M.new(database, bridge, image_bindings, log)
         backlog = require('backlog').new(),
         lookup = {}, lookup_keys = {}, lookup_cursor = 1}
     local now = function() return bridge and bridge.clock and bridge.clock() or os.clock() end
+    local function budget()
+        local started = now()
+        local window = math.floor(started / 0.016)
+        if self.budget_window ~= window then self.budget_window, self.budget_spent = window, 0 end
+        return started, math.max(0, 0.006 - self.budget_spent)
+    end
     local function candidate(w)
         if not M.eligible(w) then return false end
         if not w:IsA('/Script/UMG.Image') then return true end
@@ -66,18 +76,28 @@ function M.new(database, bridge, image_bindings, log)
         end
         return group
     end
+    function self:clear_overlays()
+        self.urgent = {}
+        self.work = nil
+        self.active = {}
+        self.backlog:clear()
+        for _, entry in pairs(self.entries) do
+            if entry.renderer then entry.renderer:detach() end
+        end
+        for _, entry in pairs(self.entries) do entry.renderer, entry.key, entry.pending_key = nil, nil, nil end
+    end
     function self:set_enabled(value)
         self.enabled = value
         for _, entry in pairs(self.entries) do entry.next_poll = 0 end
-        if not value then
-            self.urgent = {}
-            self.work = nil
-            self.active = {}
-            self.backlog:clear()
-            for _, entry in pairs(self.entries) do
-                if entry.renderer then entry.renderer:detach() end
-            end
-            for _, entry in pairs(self.entries) do entry.renderer, entry.key, entry.pending_key = nil, nil, nil end
+        if not value then self:clear_overlays() end
+    end
+    function self:set_suspended(value)
+        if self.suspended == value then return end
+        self.suspended = value
+        if value then self:clear_overlays()
+        else
+            for _, group in pairs(self.groups) do group.next_check = 0 end
+            for _, entry in pairs(self.entries) do entry.next_poll = 0 end
         end
     end
     function self:segments(text)
@@ -160,6 +180,7 @@ function M.new(database, bridge, image_bindings, log)
                 ruby_scale = (backlog or person_name) and 0.5 or 0.4,
                 overlay_only = not (backlog and backlog.message), gap = -12, line_gap = 4,
                 pad_overlay = not backlog, ruby_outline = 1,
+                compact_plain_runs = backlog and backlog.message,
                 -- UE4SS binds reflected calls to its registered Lua state;
                 -- coroutines have an unregistered state. Stop after a cached
                 -- measurement/run and restart from that cache next tick.
@@ -196,8 +217,8 @@ function M.new(database, bridge, image_bindings, log)
             end
         end
     end
-    function self:changed(w)
-        if not self.enabled or not valid(w) or not M.eligible(w) then return end
+    function self:changed(w, immediate)
+        if not self.enabled or self.suspended or not valid(w) or not M.eligible(w) then return end
         local address, name = w:GetAddress(), w:GetFullName()
         local entry = self.entries[address]
         if entry and entry.name == name then
@@ -211,9 +232,24 @@ function M.new(database, bridge, image_bindings, log)
             if not self.listed[address] then self.order[#self.order+1] = address;self.listed[address] = true end
         end
         self.urgent[address] = entry
+        if entry.group then entry.group.next_check = 0 end
+        if immediate and not self.ticking and not self.changing then
+            local started, remaining = budget()
+            remaining = math.min(remaining, 0.004)
+            if remaining > 0 then
+                -- Ready geometry can be updated before the native setter/line
+                -- callback returns. Cold work continues in the bounded UI tick.
+                self.changing = true
+                local ok = pcall(self.inspect, self, entry, started + remaining)
+                self.changing = false
+                self.budget_spent = self.budget_spent + now() - started
+                if ok and entry.key then self.urgent[address] = nil end
+            end
+        end
     end
     function self:tick()
         local started = now()
+        local deadline = self.tick_deadline or started + 0.006
         self.geometry:begin_frame()
         self.backlog:begin_frame()
         self.backlog:prune()
@@ -226,6 +262,7 @@ function M.new(database, bridge, image_bindings, log)
             if not entry or entry.name ~= name then
                 if entry and entry.renderer then entry.renderer:detach() end
                 self.entries[address] = {source = w, name = name, group = self:group_for(w)}
+                self.urgent[address] = self.entries[address]
                 if not self.listed[address] then self.order[#self.order+1] = address;self.listed[address] = true end
             end
         end
@@ -238,10 +275,16 @@ function M.new(database, bridge, image_bindings, log)
                 group.active, group.expired = false, true
                 self.groups[address] = nil
             else
-                group.active = group.owner:IsInViewport() and group.owner:IsVisible() and group.owner.RenderOpacity >= 0.01
-                group.next_check = started + 0.1
+                local was_active = group.active
+                group.active = group.owner:IsInViewport() and group.owner:IsVisible()
+                group.next_check = started + (group.active and 0.1 or 0.016)
+                if group.active and not was_active then
+                    for address, entry in pairs(self.entries) do
+                        if entry.group == group then self.urgent[address] = entry; entry.next_poll = 0 end
+                    end
+                end
             end
-            if now() - started >= 0.002 then return end
+            if now() >= deadline then return end
         end
         -- Rotate existing overlays within half the budget, leaving time for
         -- newly visible sources. Identity checks also wait for the poll time;
@@ -258,8 +301,9 @@ function M.new(database, bridge, image_bindings, log)
                     entry.renderer:detach(); entry.renderer = nil; entry.pending_key = nil
                     self.active[address] = nil
                 else
-                    local ok, reason = pcall(self.inspect, self, entry, started + 0.001)
-                    entry.next_poll = started + 0.05
+                    local ok, reason = pcall(self.inspect, self, entry,
+                        entry.pending_key and deadline or math.min(deadline, started + 0.001))
+                    entry.next_poll = entry.pending_key and 0 or started + 0.05
                     if not ok then
                         if entry.renderer then entry.renderer:detach() end
                         entry.renderer = nil; entry.pending_key = nil
@@ -273,22 +317,22 @@ function M.new(database, bridge, image_bindings, log)
         for address, entry in pairs(self.urgent) do
             self.urgent[address] = nil
             if valid(entry.source) and entry.source:GetFullName() == entry.name then
-                pcall(self.inspect, self, entry, started + 0.002)
+                pcall(self.inspect, self, entry, deadline)
             end
-            if now() - started >= 0.002 then return end
+            if now() >= deadline then return end
         end
         if self.work then
             local entry = self.work
             self.work = nil
             if self.enabled and valid(entry.source) and entry.source:GetFullName() == entry.name then
-                local ok, reason = pcall(self.inspect, self, entry, started + 0.002)
+                local ok, reason = pcall(self.inspect, self, entry, deadline)
                 if not ok then
                     if entry.renderer then entry.renderer:detach(); entry.renderer = nil end
                     entry.pending_key = nil
                     if not entry.reported then log('UI preparation retained native text: ' .. tostring(reason)); entry.reported = true end
                 end
             end
-            if now() - started >= 0.002 then return end
+            if now() >= deadline then return end
         end
         for index = 1, count do
             if self.cursor > #self.order then self.cursor = 1 end
@@ -311,8 +355,8 @@ function M.new(database, bridge, image_bindings, log)
                 table.remove(self.order, self.cursor)
             else
                 local ok, reason = true, nil
-                if self.enabled then ok, reason = pcall(self.inspect, self, entry, started + 0.002) end
-                entry.next_poll = started + (entry.renderer and 0.05 or 0.25)
+                if self.enabled then ok, reason = pcall(self.inspect, self, entry, deadline) end
+                entry.next_poll = entry.pending_key and 0 or started + (entry.renderer and 0.05 or 0.25)
                 if not ok then
                     if entry.renderer then entry.renderer:detach(); entry.renderer = nil end
                     entry.pending_key = nil
@@ -320,7 +364,7 @@ function M.new(database, bridge, image_bindings, log)
                 end
                 self.cursor = self.cursor + 1
             end
-            if index % 8 == 0 and now() - started >= 0.002 then break end
+            if index % 8 == 0 and now() >= deadline then break end
         end
     end
     function self:stats()
@@ -334,11 +378,24 @@ function M.new(database, bridge, image_bindings, log)
         for _ in pairs(self.lookup) do cached = cached + 1 end
         return #self.order, renderers, widgets, cached, collectgarbage('count')
     end
+    local tick = self.tick
+    function self:tick()
+        if self.suspended then return end
+        local started, remaining = budget()
+        if remaining <= 0 then return end
+        self.tick_deadline = started + remaining
+        self.ticking = true
+        local ok, reason = pcall(tick, self)
+        self.ticking = false
+        self.budget_spent = self.budget_spent + now() - started
+        if not ok then error(reason, 0) end
+    end
     if RegisterHook then
         for _, class in ipairs({'TextBlock', 'RichTextBlock'}) do
             pcall(RegisterHook, '/Script/UMG.' .. class .. ':SetText', function() end, function(context)
+                if not self.enabled or self.suspended then return end
                 local ok, w = pcall(function() return context:get() end)
-                if ok then pcall(self.changed, self, w) end
+                if ok then pcall(self.changed, self, w, true) end
             end)
         end
     end

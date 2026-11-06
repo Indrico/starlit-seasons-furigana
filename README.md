@@ -6,7 +6,7 @@ For AI contributors, [AGENTS.md](AGENTS.md) records the implementation, release 
 
 This targets Steam build `8278842` (game 1.61, Unreal Engine 4.24), using UE4SS and the game's original font. The current development implementation adds manual dialogue, immediate complete furigana, and fixed font sizes. **F6** switches manual/automatic progression; **F7** toggles furigana. See [dialogue controls and preferences](docs/dialogue-controls.md).
 
-The **v0.3.0-alpha.2** prerelease extends annotations to names, Japanese UI, and backlog while
+The **v0.3.0-alpha.3** prerelease extends annotations to names, Japanese UI, and backlog while
 preserving native UI fonts and widths. Menus use smaller ruby following player
 feedback; names and log text retain larger readings. See [UI annotations](docs/ui-annotations.md)
 for the data pipeline, layout rules, and supported fallbacks. The package also
@@ -16,15 +16,20 @@ sampled measurements and their limits.
 
 Alpha.2 fixes menu-guide panels growing when furigana appears. The bottom-right
 background and Enter/Esc guides now keep their native dimensions and positions.
+Alpha.3 reduces delayed menu/name/log annotations through shared font metrics,
+earlier preparation, fewer generated log widgets, and immediate ready-text updates.
+Furigana scanning and preparation pause automatically during MV/live performances
+and resume after leaving them, without changing your saved settings. Cold UI
+geometry can still delay a new annotation; zero-frame pop-in is not guaranteed.
 
 ![Current development layout at 1920 by 1080](docs/images/compact-dialogue-1080p.jpg)
 
 ## Download and usage
 
-Download [v0.3.0-alpha.2](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.2)
+Download [v0.3.0-alpha.3](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.3)
 and follow the [English usage guide](docs/usage.md).
 
-Choose **`starlit-season-furigana-v0.3.0-alpha.2-windows-x64.zip`**. Extract its
+Choose **`starlit-season-furigana-v0.3.0-alpha.3-windows-x64.zip`**. Extract its
 contents next to `StarlitSeason.exe`, run **Check-Furigana.cmd**, and launch through
 Steam. **No Python, build steps, extraction, or separate loader download are needed.**
 The package includes the pinned UE4SS loader, native DLL, and prebuilt kana annotations.
@@ -109,7 +114,7 @@ The [reverse-engineering notes](docs/reverse-engineering.md) describe the eviden
 
 The tests use synthetic data and do not require or launch the game. In-game verification is recorded separately.
 
-The current validation run passed 127 tests: 17 reading, 9 extraction, 12 Python
-installer, 7 Windows package/helper, and 82 Lua runtime/layout/lifecycle tests.
+The current validation run passed 147 tests: 17 reading, 9 extraction, 12 Python
+installer, 7 Windows package/helper, and 102 Lua runtime/layout/lifecycle tests.
 The prebuilt table was also checked against all 62,508 distinct local source
 strings, including 56,494 entries with readings.

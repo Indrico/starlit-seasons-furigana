@@ -1,4 +1,4 @@
-# Drag-and-drop installation — v0.3.0-alpha.2
+# Drag-and-drop installation — v0.3.0-alpha.3
 
 The Windows package includes the UE4SS loader, compiled native bridge, and prebuilt furigana annotations.
 **No Python, compilation, game-data extraction, or separate downloads are needed.**
@@ -11,8 +11,8 @@ See [UI support and limits](ui-annotations.md) and [controls](dialogue-controls.
 
 ## Fresh installation
 
-1. Download **`starlit-season-furigana-v0.3.0-alpha.2-windows-x64.zip`** from the
-   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.2).
+1. Download **`starlit-season-furigana-v0.3.0-alpha.3-windows-x64.zip`** from the
+   [release page](https://github.com/Indrico/starlit-seasons-furigana/releases/tag/v0.3.0-alpha.3).
    Choose this asset rather than GitHub's automatic **Source code** archives.
 2. Close the game. In Steam, open **Properties → Installed Files → Browse**.
 3. Extract **all contents** of the ZIP into that game folder, next to
@@ -110,3 +110,10 @@ remain unverified. See [runtime verification](runtime.md).
 
 `SHA256SUMS.txt` on the release page contains the download checksum. Developers
 can use the optional [source-build workflow](build-from-source.md).
+
+## MV/live performances
+
+Furigana discovery and preparation pause automatically while the performance
+manager is alive, including its pause and photo screens. The performance UI
+keeps native text. Annotations resume after leaving the performance; your master,
+F7, and manual/automatic preferences are preserved. No extra shortcut is needed.

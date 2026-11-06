@@ -8,10 +8,29 @@ in **English**.
 
 ## Current development milestone
 
-The current milestone is **v0.3.0-alpha.2**, adding names, Japanese menus,
-and backlog to the existing dialogue/choice implementation. Check the actual
+The current milestone is **v0.3.0-alpha.3**, reducing UI preparation delays
+and suspending furigana work during MV/live performances. Names, menus, and
+backlog were introduced in alpha.1. Check the actual
 GitHub tag and release assets before assuming publication succeeded.
 Read [UI annotations](docs/ui-annotations.md) before editing the new lifecycle.
+
+Alpha.3 reduces delayed UI readings. Nonwrapping overlays measure span boundaries,
+UI font metrics share a 4,096-entry bounded cache, and plain log runs merge only
+when their measured width agrees. Per-role measurement widgets retain fonts.
+Native text/line callbacks try immediate preparation; callbacks and the UI tick
+share a cooperative six-millisecond budget per 16 ms window. A callback can use
+at most four milliseconds. This is not a hard bound on one native operation.
+Prepare during an inherited CanvasPanel fade without bypassing a source's own
+hidden state. New screens/entries receive priority; pending work skips the old
+50 ms poll. Native geometry still determines when a new layout can be positioned.
+
+During MV/live, `performance_guard.lua` detects a live `LiveManager` from one
+initial snapshot and queued construction notifications. Poll its cached object
+set at most every 250 ms (native line events may force an early check). Suspend
+UI discovery, lookups, geometry, rendering, and dialogue discovery; detach
+overlays once. Preserve master/F7/manual preferences. Resume after the manager
+expires. Registry notifications may still queue object references while paused.
+Do not replace this with recurring global scans or music-playback detection.
 
 Alpha.2 fixes the generated overlays inflating native auto-sized menu panels.
 Geometry-based text and image overlays use an outer CanvasPanel with stretched
@@ -50,7 +69,7 @@ padded host enlarged the footer background and shifted Enter/Esc to the left.
   and temporary UI samplers. Inspect the live ownership state before changing it.
 
 `main` contains the v0.3 UI extension and the v0.2 dialogue/performance changes.
-The player prerelease is **v0.3.0-alpha.2**; verify its GitHub metadata and asset
+The player prerelease is **v0.3.0-alpha.3**; verify its GitHub metadata and asset
 checksum before installation. Do not overwrite historical release assets.
 The user's local `plan.md` is intentionally untracked.
 
@@ -144,15 +163,15 @@ The public repository is
   `75dc8b081d324fe0598a87b26e37d13a84d3648cbb1d08eb48c514376407a11b`.
   The experimental URL can change; verify the hash and do not substitute a
   newer loader without compatibility testing.
-- Player asset: `starlit-season-furigana-v0.3.0-alpha.2-windows-x64.zip`.
+- Player asset: `starlit-season-furigana-v0.3.0-alpha.3-windows-x64.zip`.
   ZIP SHA-256:
-  `48e9206b054466f1e49da68c068e336bf8a19fc3fefd90f34fe592a452acb689`.
+  `7709f5de8639760f11b548a4c129af83339826226c3586e6a61ed0d8940150d1`.
 
 Extract all ZIP contents next to `StarlitSeason.exe`,
 run `Check-Furigana.cmd` with the game closed, then launch through Steam.
 Furigana starts enabled and dialogue is manual; F6 changes progression and F7
 toggles annotations. OPTION contains the master switch (F8 while open).
-The package contains 26 owned runtime files and five helpers, including the
+The package contains 27 owned runtime files and five helpers, including the
 precompiled bridge, UE4SS's MIT license, and MinHook's license. Uninstall the old
 managed version before an upgrade; preserve preferences.
 
@@ -162,6 +181,7 @@ managed version before an upgrade; preserve preferences.
 | --- | --- |
 | `mod/Scripts/main.lua` | Native events, discovery/fallback, lifecycle, F6/F7/F8, master switch |
 | `mod/Scripts/object_registry.lua` | One initial class scan, queued construction notifications, expired-object cleanup |
+| `mod/Scripts/performance_guard.lua` | MV/live lifecycle gate; cached object checks, no recurring global scans |
 | `mod/Scripts/ui_annotations.lua` | Independent menu/name/log lifecycle, budgets, bounded lookup, restoration |
 | `mod/Scripts/ui_geometry.lua` | Cached native geometry and supported relative transforms |
 | `mod/Scripts/backlog.lua` | Native log culling, shared selected/unselected row sizes, numeric restoration ledger |
@@ -277,8 +297,8 @@ python -m venv .venv
 & '.\.venv\Scripts\python.exe' -m unittest discover -s tests -v
 ```
 
-The current suites contain **127 tests**: 17 reading, 9 extraction, 12
-Python installer, 7 Windows portable, and 82 Lua lookup/layout/runtime/controller/menu/performance
+The current suites contain **147 tests**: 17 reading, 9 extraction, 12
+Python installer, 7 Windows portable, and 102 Lua lookup/layout/runtime/controller/menu/performance
 tests. These use synthetic data without launching the game. Portable tests
 require Windows; Lua tests require the development dependencies.
 
@@ -293,7 +313,7 @@ The exact release ZIP passed a real clean runtime install, Steam launch,
 visible furigana, F7 off/on, removal with identical patch restoration hashes,
 and reinstallation. Verify the published download against the checksum above.
 See [the verification record](docs/runtime.md) and
-[release notes](docs/releases/v0.3.0-alpha.2.md) for evidence.
+[release notes](docs/releases/v0.3.0-alpha.3.md) for evidence.
 
 For documentation-only changes, check links, commands, and `git diff --check`;
 re-running game tests is unnecessary. For behavior changes, run affected suites
@@ -301,6 +321,13 @@ and perform the relevant in-game checks before expanding compatibility claims.
 
 ## Known limits and follow-up work
 
+- Alpha.3's exploratory MV sample still has frame spikes while furigana work is
+  suspended (p99 37.854 ms; 141 intervals above 33.33 ms in 60 seconds). An
+  unsynchronized pre-suspension sample has better p99 but a larger maximum.
+  Do not claim an overall FPS improvement. Retain both captures and use matched
+  song/camera phases plus CPU/GPU attribution for further diagnosis.
+- Ready-text preparation is faster, but cold menu geometry/admission can still
+  cause ruby pop-in. The request for immediate readings everywhere remains open.
 - The late v0.3 candidate held-line matrix has one run with nine intervals above 33.33 ms
   (maximum 815.323 ms); two other runs have none. There is no same-session paired
   baseline or CPU attribution. Treat occasional stuttering as an open follow-up,
@@ -360,7 +387,7 @@ mod is installed. Do not reinstall or remove a working runtime merely to edit
 source documentation. Keep private test probes out of the final player package.
 
 The v0.3 player ZIP is in the sibling
-`releases/v0.3.0-alpha.2-candidate1/` directory, with the checksum above.
+`releases/v0.3.0-alpha.3-candidate7/` directory, with the checksum above.
 The historical optimized v0.2 ZIP is in `releases/v0.2.0-alpha.1-optimized/`. The
 `v0.2.0-alpha.1-final` folder and candidate record describe an earlier functional
 checkpoint, not the optimized release. Private profiling ZIPs must never be

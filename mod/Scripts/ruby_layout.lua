@@ -21,7 +21,7 @@ function M.text(segments)
 end
 
 -- Ruby groups stay atomic; unannotated text can wrap between characters.
-local function units(segments)
+local function units(segments, chunk_plain)
     local out, consumed = {}, 0
     for _, segment in ipairs(segments) do
         local reading = segment.reading
@@ -29,6 +29,19 @@ local function units(segments)
             assert(not segment.base:find('[\r\n]'), 'Ruby must not span a newline')
             out[#out + 1] = {base = segment.base, reading = reading, start = consumed}
             consumed = consumed + utf8.len(segment.base)
+        elseif chunk_plain then
+            -- Ruby-only, non-wrapping labels need advances at span boundaries,
+            -- not a separate native font prepass for every kana character.
+            for text, breaks in segment.base:gmatch('([^\r\n]*)([\r\n]*)') do
+                if text ~= '' then
+                    out[#out + 1] = {base = text, start = consumed}
+                    consumed = consumed + utf8.len(text)
+                end
+                for _, character in ipairs(chars(breaks)) do
+                    out[#out + 1] = {base = character, start = consumed}
+                    consumed = consumed + 1
+                end
+            end
         else
             for _, character in ipairs(chars(segment.base)) do
                 out[#out + 1] = {base = character, start = consumed}
@@ -67,18 +80,19 @@ function M.layout(segments, options)
         end
         segments = combined
     end
-    local items = units(segments)
+    local items = units(segments, options.overlay_only and options.no_wrap)
     local prefix, prefix_width = '', 0
     for _, item in ipairs(items) do
         if item.base == '\r' or item.base == '\n' then
             item.base_width, item.ruby_width, item.width = 0, 0, 0
             prefix, prefix_width = '', 0
         else
-            item.base_width = options.measure(item.base, base_size, 'base')
             if options.overlay_only then
                 prefix = prefix .. item.base
                 local next_width = options.measure(prefix, base_size, 'base')
                 item.base_width, prefix_width = next_width - prefix_width, next_width
+            else
+                item.base_width = options.measure(item.base, base_size, 'base')
             end
             item.ruby_width = item.reading and options.measure(item.reading, ruby_size, 'ruby') or 0
             item.width = options.overlay_only and item.base_width or math.max(item.base_width, item.ruby_width)
@@ -136,6 +150,42 @@ function M.layout(segments, options)
     end
     return {runs = runs, height = y + line_height - line_gap, line_height = line_height,
         line_gap = line_gap, lines = line, line_widths = line_widths}
+end
+
+-- Collapse plain log runs only when the native combined width agrees with the
+-- existing advances. Keep separately positioned runs when kerning would move them.
+function M.compact_plain(result, measure)
+    local runs, index = {}, 1
+    while index <= #result.runs do
+        local first, last = result.runs[index], index
+        if not first.reading then
+            while last < #result.runs do
+                local current, next_run = result.runs[last], result.runs[last + 1]
+                if next_run.reading or next_run.line ~= first.line or next_run.base_size ~= first.base_size or
+                    math.abs(current.x + current.base_width - next_run.x) > 0.01 then break end
+                last = last + 1
+            end
+        end
+        if last > index then
+            local parts = {}
+            for i = index, last do parts[#parts + 1] = result.runs[i].base end
+            local text = table.concat(parts)
+            local width = result.runs[last].x + result.runs[last].base_width - first.x
+            if math.abs(measure(text, first.base_size, 'base') - width) <= 0.01 then
+                local run = {}
+                for key, value in pairs(first) do run[key] = value end
+                run.base, run.base_width, run.width = text, width, width
+                runs[#runs + 1] = run
+            else
+                for i = index, last do runs[#runs + 1] = result.runs[i] end
+            end
+        else
+            runs[#runs + 1] = first
+        end
+        index = last + 1
+    end
+    result.runs = runs
+    return result
 end
 
 function M.paginate(result, height)

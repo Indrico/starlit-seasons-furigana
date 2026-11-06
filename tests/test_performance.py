@@ -116,6 +116,62 @@ class NativePerformanceTests(unittest.TestCase):
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_ui_text_changes_reuse_font_configuration_and_keep_source_font_unchanged(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
+        lua.execute('''
+            local ruby=require('umg_ruby')
+            local renderer
+            for i=1,100 do
+                local name,value=debug.getupvalue(ruby.attach,i)
+                if name=='Renderer' then renderer=value end
+            end
+            local copies,texts=0,0
+            local font={Size=26,OutlineSettings={OutlineSize=0}}
+            local block={SetFont=function(self,f)
+                copies=copies+1
+                self.Font={Size=f.Size,OutlineSettings={OutlineSize=f.OutlineSettings.OutlineSize}}
+            end,SetText=function()texts=texts+1 end}
+            local r=setmetatable({font=font,base_outline=0,options={geometry=true},
+                text_library={Conv_StringToText=function(_,s)return s end}},renderer)
+            r:_set_text(block,'first',14,'ruby');r:_set_text(block,'second',14,'ruby')
+            assert(copies==2 and texts==2 and font.Size==26)
+            r:_set_text(block,'third',15,'ruby')
+            assert(copies==4 and texts==3 and font.Size==26)
+        ''')
+
+    def test_ui_font_measurements_are_shared_bounded_and_context_specific(self):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())
+        lua.execute('''
+            local ruby=require('umg_ruby')
+            local renderer
+            for i=1,100 do
+                local name,value=debug.getupvalue(ruby.attach,i)
+                if name=='Renderer' then renderer=value end
+            end
+            local native_calls, yields=0,0
+            local function fresh(context)
+                return setmetatable({measure_context=context,widths={},width_keys={},width_cursor=1,heights={},
+                    options={yield_work=function()yields=yields+1 end},_set_text=function()end,
+                    measure_widget={SetVisibility=function()end,InvalidateLayoutAndVolatility=function()end,
+                        ForceLayoutPrepass=function()native_calls=native_calls+1 end,
+                        GetDesiredSize=function()return {X=20,Y=40} end}},renderer)
+            end
+            fresh('fontA:dpi1:scale1'):_measure('same',14,'ruby')
+            local second=fresh('fontA:dpi1:scale1')
+            assert(second:_measure('same',14,'ruby')==20 and second.heights['ruby:14']==40)
+            assert(native_calls==1 and yields==1)
+            fresh('fontB:dpi1:scale1'):_measure('same',14,'ruby')
+            fresh('fontA:dpi2:scale1'):_measure('same',14,'ruby')
+            fresh('fontA:dpi1:scale2'):_measure('same',14,'ruby')
+            assert(native_calls==4)
+            for i=1,4096 do fresh('fontA:dpi1:scale1'):_measure(tostring(i),14,'ruby') end
+            local before=native_calls
+            fresh('fontA:dpi1:scale1'):_measure('same',14,'ruby')
+            assert(native_calls==before+1)
+        ''')
+
     def test_interrupted_long_page_finishes_without_repeating_completed_native_runs(self):
         lua = LuaRuntime(unpack_returned_tuples=True)
         lua.execute("package.path = ... .. '/?.lua;' .. package.path", SCRIPTS.as_posix())

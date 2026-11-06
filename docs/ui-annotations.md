@@ -88,11 +88,21 @@ notifications. New notifications take priority over the initial backlog. There
 are no periodic global widget scans. Root visibility is shared between labels;
 hidden screens skip text lookup. Negative/positive reading lookup is limited to
 2,048 entries; each renderer's font measurements remain bounded as before.
+Alpha.3 also shares 4,096 UI measurements, keyed by font/face, spacing, outline,
+size, viewport DPI, and geometry scale. Separate base/ruby measuring widgets keep
+their font configuration. Nonwrapping labels measure span boundaries instead of
+every plain character. Plain log runs share a TextBlock only when the native
+combined width agrees with their original advances; kerning differences preserve
+separate runs.
 
-The UI timer has a cooperative two-millisecond wall-time budget. Existing
-overlays rotate within the first millisecond, leaving time for newly visible
-sources instead of repeatedly inspecting the same prefix. Identity checks follow
-the same polling interval. Cold font
+Native text/line callbacks try preparing ready geometry before returning, using
+at most four milliseconds. They share a cooperative six-millisecond QPC budget
+per 16 ms window with the UI timer. Existing ready overlays rotate within the
+first millisecond, leaving time for new/pending sources. Newly admitted widgets
+and newly opened screens receive priority. Incomplete preparation does not wait
+for the ordinary 50 ms refresh poll. Text can prepare during a shared CanvasPanel
+fade because its overlay inherits that fade; a source's own hidden state remains
+respected. Native geometry must still become available before placement. Cold font
 measurements and generated runs checkpoint into reusable caches; an unfinished
 layout retries from those caches on the next tick. Completed native run updates,
 including visibility, are cached before yielding so a long page cannot restart
@@ -105,6 +115,23 @@ reflected calls with registered Lua states and rejects calls from a new
 coroutine state. All Unreal operations run on its original game-thread state.
 `sf_clock` uses QueryPerformanceCounter because `os.clock` counts process CPU
 time across game threads. See [native notes](../native/README.md).
+
+## MV/live suspension
+
+`performance_guard.lua` tracks `/Script/imal.LiveManager` using one initial
+class snapshot and construction notifications. Cached identity/validity checks
+run at most every 250 ms; a native dialogue assignment can request an early
+check. While a performance manager is alive, both discovery loops return before
+walking widgets. SetText callbacks return before reading their contexts, and
+lookups, geometry checks, native font prepasses, and generated run updates stop.
+Existing overlays and backlog sizing are restored once on entry. Queued object
+notifications can still collect references for admission after the performance.
+The loader, tiny timer callbacks, and native bridge remain loaded. This is not
+a claim of zero mod CPU usage or that every frame drop originates in furigana.
+
+Suspension is independent of master/F7 state and manual dialogue preferences.
+Native performance controls, lyrics, pause/photo screens, and camera behavior
+remain available. On manager expiry, normal preparation resumes.
 
 ## Limits
 
